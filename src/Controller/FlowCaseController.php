@@ -4,8 +4,10 @@ namespace Atwx\Flow\Controller;
 
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
+use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
+use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Phase;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
@@ -180,6 +182,28 @@ abstract class FlowCaseController extends FrontdeskController
         if (!$actor) {
             return $actions;
         }
+        $status = $this->statusAction($record, $actor);
+        if ($status) {
+            $actions[] = $status;
+        }
+        if ($record->hasMethod('canAddFlowNote') && $record->canAddFlowNote($actor)) {
+            $actions[] = RecordAction::create('flownote', _t(self::class . '.ADD_NOTE', 'Add note'))
+                ->withComment(_t(self::class . '.NOTE', 'Note'), true)
+                ->submitLabel(_t(self::class . '.SAVE_NOTE', 'Save note'))
+                ->handle(function (DataObject $record, ?string $option, string $text) use ($actor) {
+                    /** @var DataObject&CaseFileExtension $record */
+                    $record->addFlowNote($text, $actor);
+                    return _t(self::class . '.NOTE_ADDED', 'The note has been added.');
+                });
+        }
+        return $actions;
+    }
+
+    /**
+     * "Change status" with the transitions the actor may perform, or null if none.
+     */
+    protected function statusAction(DataObject $record, FlowActor $actor): ?RecordAction
+    {
         $options = [];
         foreach (TransitionService::singleton()->availableTransitions($record, $actor) as $transition) {
             $to = $transition->To();
@@ -188,9 +212,9 @@ abstract class FlowCaseController extends FrontdeskController
             }
         }
         if ($options === []) {
-            return $actions;
+            return null;
         }
-        $actions[] = RecordAction::create('flowstatus', _t(self::class . '.CHANGE_STATUS', 'Change status'))
+        return RecordAction::create('flowstatus', _t(self::class . '.CHANGE_STATUS', 'Change status'))
             ->options($options)
             ->withComment(_t(self::class . '.COMMENT', 'Comment (optional)'))
             ->submitLabel(_t(self::class . '.CHANGE_STATUS', 'Change status'))
@@ -203,7 +227,6 @@ abstract class FlowCaseController extends FrontdeskController
                     ['status' => $to->exists() ? $to->Title : '']
                 );
             });
-        return $actions;
     }
 
     // ─── Timeline ────────────────────────────────────────────────────────────
@@ -217,6 +240,17 @@ abstract class FlowCaseController extends FrontdeskController
         $changes = StatusChange::get()->filter(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID]);
         foreach ($changes as $change) {
             $entries->push($this->statusChangeEntry($change));
+        }
+        $notes = Note::get()->filter(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID]);
+        foreach ($notes as $note) {
+            $member = $note->Member();
+            $entries->push(TimelineEntry::create(
+                (string) $note->Created,
+                _t(self::class . '.NOTE', 'Note'),
+                (string) $note->Text,
+                $member->exists() ? (string) $member->getName() : '',
+                'note'
+            ));
         }
         $this->extend('updateFlowTimeline', $entries, $record);
         return $entries;

@@ -98,7 +98,7 @@ class FlowCaseControllerTest extends SapphireTest
         $course = $this->courseIn('draft');
         $actions = TestCourseController::create()->recordActions($course);
 
-        $this->assertCount(1, $actions);
+        $this->assertCount(2, $actions, 'status change and note');
         $this->assertSame('flowstatus', $actions[0]->getName());
         $this->assertSame(['with_speaker' => 'An Referent:in senden'], $actions[0]->getOptions());
 

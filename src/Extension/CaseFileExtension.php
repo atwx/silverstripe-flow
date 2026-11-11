@@ -4,10 +4,12 @@ namespace Atwx\Flow\Extension;
 
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
+use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Transition;
 use Atwx\Flow\Model\Workflow;
+use Atwx\Flow\Service\FieldAccess;
 use Atwx\Flow\Service\TransitionException;
 use Atwx\Flow\Service\TransitionService;
 use SilverStripe\Core\Extension;
@@ -31,6 +33,7 @@ use SilverStripe\ORM\HasManyList;
  * @property int $FlowStatusID
  * @method Status FlowStatus()
  * @method HasManyList<StatusChange> FlowStatusChanges()
+ * @method HasManyList<Note> FlowNotes()
  * @extends Extension<DataObject&static>
  */
 class CaseFileExtension extends Extension
@@ -41,6 +44,15 @@ class CaseFileExtension extends Extension
 
     private static array $has_many = [
         'FlowStatusChanges' => StatusChange::class . '.Case',
+        'FlowNotes' => Note::class . '.Case',
+    ];
+
+    /**
+     * History and notes go with the case file.
+     */
+    private static array $cascade_deletes = [
+        'FlowStatusChanges',
+        'FlowNotes',
     ];
 
     /**
@@ -109,6 +121,46 @@ class CaseFileExtension extends Extension
         return TransitionService::singleton()->transition($this->getOwner(), $target, $actor, $comment);
     }
 
+    /**
+     * Whether the actor may add notes: anyone who may change at least one field
+     * of the case file in its current status.
+     */
+    public function canAddFlowNote(?FlowActor $actor = null): bool
+    {
+        $actor ??= MemberActor::current();
+        $owner = $this->getOwner();
+        return $actor !== null
+            && $owner->isInDB()
+            && FieldAccess::singleton()->writableFields($owner, $actor) !== [];
+    }
+
+    /**
+     * Add a note to the timeline.
+     *
+     * @throws TransitionException if the actor may not add notes or the text is empty
+     */
+    public function addFlowNote(string $text, ?FlowActor $actor = null): Note
+    {
+        $actor ??= MemberActor::current();
+        $text = trim($text);
+        if ($text === '') {
+            throw new TransitionException(_t(self::class . '.NOTE_EMPTY', 'Please enter a text.'));
+        }
+        if (!$actor || !$this->canAddFlowNote($actor)) {
+            throw new TransitionException(_t(self::class . '.NOTE_NOT_ALLOWED', 'You may not add notes here.'));
+        }
+        $owner = $this->getOwner();
+        $note = Note::create([
+            'Text' => $text,
+            'MemberID' => (int) $actor->flowMember()?->ID,
+        ]);
+        $note->setField('CaseID', $owner->ID);
+        $note->setField('CaseClass', $owner->ClassName);
+        $note->write();
+        $owner->invokeWithExtensions('onAfterFlowNote', $note, $actor);
+        return $note;
+    }
+
     protected function onBeforeWrite(): void
     {
         $owner = $this->getOwner();
@@ -157,10 +209,11 @@ class CaseFileExtension extends Extension
         $labels['FlowStatus'] = _t(self::class . '.has_one_FlowStatus', 'Status');
         $labels['FlowStatusID'] = $labels['FlowStatus'];
         $labels['FlowStatusChanges'] = _t(self::class . '.has_many_FlowStatusChanges', 'Status history');
+        $labels['FlowNotes'] = _t(self::class . '.has_many_FlowNotes', 'Notes');
     }
 
     protected function updateCMSFields(FieldList $fields): void
     {
-        $fields->removeByName(['FlowStatusID', 'FlowStatus', 'FlowStatusChanges']);
+        $fields->removeByName(['FlowStatusID', 'FlowStatus', 'FlowStatusChanges', 'FlowNotes']);
     }
 }

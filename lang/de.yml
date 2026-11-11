@@ -91,6 +91,9 @@ de:
   Atwx\Flow\Extension\CaseFileExtension:
     has_one_FlowStatus: 'Status'
     has_many_FlowStatusChanges: 'Statusverlauf'
+    has_many_FlowNotes: 'Notizen'
+    NOTE_EMPTY: 'Bitte einen Text eingeben.'
+    NOTE_NOT_ALLOWED: 'Sie dürfen hier keine Notizen anlegen.'
   Atwx\Flow\Service\TransitionService:
     NO_WORKFLOW: 'Für diesen Eintrag gibt es keinen Ablauf.'
     NOT_SAVED: 'Bitte zuerst speichern.'
@@ -131,3 +134,13 @@ de:
     TIMELINE: 'Verlauf'
     TIMELINE_CHANGE: 'Status: {from} → {to}'
     TIMELINE_CREATED: 'Angelegt, Status: {to}'
+    ADD_NOTE: 'Notiz hinzufügen'
+    NOTE: 'Notiz'
+    SAVE_NOTE: 'Notiz speichern'
+    NOTE_ADDED: 'Die Notiz wurde hinzugefügt.'
+  Atwx\Flow\Model\Note:
+    SINGULARNAME: 'Notiz'
+    PLURALNAME: 'Notizen'
+    db_Text: 'Text'
+    has_one_Case: 'Akte'
+    has_one_Member: 'Durch'
