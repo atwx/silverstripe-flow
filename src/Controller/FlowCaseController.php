@@ -280,6 +280,46 @@ abstract class FlowCaseController extends FrontdeskController
     }
 
     /**
+     * Edit links are only listed for members who may edit (also on record pages).
+     */
+    protected function canShowSubController(string $class, DataObject $record): bool
+    {
+        if (is_a($class, AccessLinkSubController::class, true)) {
+            return $this->canEdit();
+        }
+        return parent::canShowSubController($class, $record);
+    }
+
+    /**
+     * Status and phase in the header of a record view with record pages.
+     *
+     * @return ArrayList<ArrayData>|null
+     */
+    protected function defineHeaderFields(DataObject $record): ?ArrayList
+    {
+        if (!$record->hasExtension(CaseFileExtension::class)) {
+            return null;
+        }
+        /** @var DataObject&CaseFileExtension $record */
+        $status = $record->FlowStatus();
+        if (!$status->exists()) {
+            return null;
+        }
+        $fields = ArrayList::create([ArrayData::create([
+            'Label' => _t(self::class . '.STATUS', 'Status'),
+            'Value' => $status->Title,
+        ])]);
+        $phase = $status->Phase();
+        if ($phase->exists()) {
+            $fields->push(ArrayData::create([
+                'Label' => _t(self::class . '.PHASE', 'Phase'),
+                'Value' => $phase->Title,
+            ]));
+        }
+        return $fields;
+    }
+
+    /**
      * Only members who may edit see the edit links.
      *
      * @return ArrayList<ArrayData>

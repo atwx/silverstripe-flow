@@ -40,6 +40,22 @@ class TestCourseController extends FlowCaseController implements TestOnly
         return $this->defineTimeline($record);
     }
 
+    /**
+     * @return ArrayList<\SilverStripe\Model\ArrayData>|null
+     */
+    public function headerFields(DataObject $record): ?ArrayList
+    {
+        return $this->defineHeaderFields($record);
+    }
+
+    /**
+     * @param class-string $class
+     */
+    public function showsSubController(string $class, DataObject $record): bool
+    {
+        return $this->canShowSubController($class, $record);
+    }
+
     public function columns(): ColumnCollection
     {
         return $this->defineColumns();
