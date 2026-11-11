@@ -9,6 +9,7 @@ use Atwx\Flow\Model\Transition;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Tests\Stubs\TestApplication;
 use Atwx\Flow\Tests\Stubs\TestCourse;
+use Atwx\Flow\Tests\Stubs\TestTicket;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\ORM\DataObject;
@@ -25,6 +26,7 @@ class WorkflowConfigTest extends SapphireTest
     protected static $extra_dataobjects = [
         TestCourse::class,
         TestApplication::class,
+        TestTicket::class,
     ];
 
     private function workflowRecord(string $key = 'course'): Workflow
@@ -92,7 +94,7 @@ class WorkflowConfigTest extends SapphireTest
 
     public function testWorkflowCodeIsGloballyUnique(): void
     {
-        $workflow = Workflow::create(['Code' => 'course', 'Title' => 'Kurs 2', 'CaseClass' => Member::class]);
+        $workflow = Workflow::create(['Code' => 'course', 'Title' => 'Kurs 2', 'CaseClass' => TestTicket::class]);
         $this->assertContains('Code', $this->errorFields($workflow->validate()));
     }
 
@@ -110,6 +112,9 @@ class WorkflowConfigTest extends SapphireTest
         $this->assertContains('CaseClass', $this->errorFields($workflow->validate()));
 
         $workflow->CaseClass = Member::class;
+        $this->assertContains('CaseClass', $this->errorFields($workflow->validate()), 'needs the extension');
+
+        $workflow->CaseClass = TestTicket::class;
         $this->assertTrue($workflow->validate()->isValid());
     }
 

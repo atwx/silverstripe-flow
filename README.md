@@ -20,13 +20,34 @@ phases, statuses, transitions (with the roles allowed to perform them) and roles
 (internal roles map to a security group, external roles act through edit links).
 Every record has a stable `Code` for configuration files and hooks.
 
-The classes offered as case file class are configured for now:
+## Case files
+
+Any data class becomes a case file through the extension:
 
 ```yaml
-Atwx\Flow\Model\Workflow:
-  case_classes:
-    - App\Models\Event
+App\Models\Event:
+  extensions:
+    - Atwx\Flow\Extension\CaseFileExtension
 ```
+
+It adds the status (`FlowStatus`) and the status history (`FlowStatusChanges`).
+New records start in the initial status of the workflow for their class. The status
+only changes through the `TransitionService`; writing `FlowStatusID` directly is
+ignored.
+
+```php
+$event->availableTransitions();               // for the current member
+$event->transitionTo('in_review', null, 'Comment');
+```
+
+Rights come from roles: a logged-in member has every internal role whose group
+they are in. Hooks on the domain class (or its extensions) and on the service:
+
+- `onBeforeTransition(Transition $transition, FlowActor $actor, string $comment)`,
+  inside the database transaction; throw a `TransitionException` to refuse
+- `onAfterTransition(StatusChange $change, FlowActor $actor)`, after commit
+
+Extensions of `TransitionService` receive the case file as additional first argument.
 
 > Status: under construction (MVP). The demo project is
 > [`atwx/silverstripe-flow-demo`](https://github.com/atwx/silverstripe-flow-demo).
@@ -48,6 +69,7 @@ of this repository (see the demo README).
 cd silverstripe-flow-demo
 ddev flow-test                      # all module tests
 ddev flow-test --filter Workflow    # PHPUnit arguments are passed through
+ddev flow-check                     # PHPCS and PHPStan
 ```
 
 `ddev flow-test` runs PHPUnit with the root DB user (SapphireTest creates temporary

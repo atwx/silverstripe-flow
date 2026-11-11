@@ -26,7 +26,7 @@ de:
     has_many_Roles: 'Rollen'
     CHOOSE_CLASS: '– bitte wählen –'
     CHOOSE_STATUS: '– bitte wählen –'
-    CASECLASS_INVALID: 'Bitte eine Datenklasse für die Akten wählen.'
+    CASECLASS_INVALID: 'Bitte eine Datenklasse mit der Akten-Erweiterung wählen.'
     CASECLASS_TAKEN: 'Für diese Klasse gibt es bereits einen Ablauf.'
     INITIALSTATUS_FOREIGN: 'Der Anfangsstatus muss zu diesem Ablauf gehören.'
   Atwx\Flow\Model\Phase:
@@ -77,3 +77,23 @@ de:
     STATUS_REQUIRED: 'Bitte einen Status wählen.'
     SAME_STATUS: 'Der Zielstatus muss sich vom Ausgangsstatus unterscheiden.'
     DUPLICATE: 'Diesen Übergang gibt es bereits.'
+  Atwx\Flow\Model\StatusChange:
+    SINGULARNAME: 'Statuswechsel'
+    PLURALNAME: 'Statuswechsel'
+    db_Comment: 'Kommentar'
+    has_one_Case: 'Akte'
+    has_one_From: 'Von'
+    has_one_To: 'Nach'
+    has_one_Member: 'Durch'
+    Created: 'Datum'
+  Atwx\Flow\Extension\CaseFileExtension:
+    has_one_FlowStatus: 'Status'
+    has_many_FlowStatusChanges: 'Statusverlauf'
+  Atwx\Flow\Service\TransitionService:
+    NO_WORKFLOW: 'Für diesen Eintrag gibt es keinen Ablauf.'
+    NOT_SAVED: 'Bitte zuerst speichern.'
+    UNKNOWN_STATUS: 'Unbekannter Status.'
+    NOT_DEFINED: 'Von hier aus kann der Status nicht zu „{status}“ wechseln.'
+    NOT_ALLOWED: 'Sie dürfen den Status nicht zu „{status}“ ändern.'
+    STALE: 'Der Status wurde inzwischen geändert. Bitte laden Sie die Seite neu.'
+    NO_ACTOR: 'Bitte melden Sie sich an.'

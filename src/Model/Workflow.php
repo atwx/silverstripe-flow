@@ -2,6 +2,8 @@
 
 namespace Atwx\Flow\Model;
 
+use Atwx\Flow\Extension\CaseFileExtension;
+use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
@@ -115,10 +117,10 @@ class Workflow extends DataObject
         }
 
         $class = (string) $this->CaseClass;
-        if ($class === '' || !class_exists($class) || !is_subclass_of($class, DataObject::class)) {
+        if (!in_array($class, self::caseClasses(), true)) {
             $result->addFieldError('CaseClass', _t(
                 self::class . '.CASECLASS_INVALID',
-                'Please choose a data class for the case files.'
+                'Please choose a data class with the case file extension.'
             ));
         } elseif (self::get()->filter('CaseClass', $class)->exclude('ID', (int) $this->ID)->exists()) {
             $result->addFieldError('CaseClass', _t(
@@ -139,6 +141,23 @@ class Workflow extends DataObject
     }
 
     /**
+     * Data classes that carry the case file extension.
+     *
+     * @return array<int, class-string<DataObject>>
+     */
+    public static function caseClasses(): array
+    {
+        $classes = [];
+        foreach (ClassInfo::subclassesFor(DataObject::class, false) as $class) {
+            if (DataObject::has_extension($class, CaseFileExtension::class)) {
+                $classes[] = $class;
+            }
+        }
+        sort($classes);
+        return $classes;
+    }
+
+    /**
      * Data classes a workflow can be attached to, keyed by class name.
      *
      * @return array<string, string>
@@ -146,10 +165,8 @@ class Workflow extends DataObject
     protected function caseClassOptions(): array
     {
         $options = [];
-        foreach ($this->config()->get('case_classes') ?: [] as $class) {
-            if (class_exists($class)) {
-                $options[$class] = DataObject::singleton($class)->i18n_singular_name() . " ({$class})";
-            }
+        foreach (self::caseClasses() as $class) {
+            $options[$class] = DataObject::singleton($class)->i18n_singular_name() . " ({$class})";
         }
         if ($this->CaseClass && !isset($options[$this->CaseClass])) {
             $options[$this->CaseClass] = $this->CaseClass;
