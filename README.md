@@ -276,6 +276,34 @@ override it in the project for the letterhead. PDFs are made by the
 (headless Chrome; the HTML is printed from a temporary file, nothing is served
 through a URL).
 
+## Follow-ups
+
+Follow-ups ("Wiedervorlagen") have a due date, a text and the member who takes
+care of them. They are added in the case file (sub-list *Wiedervorlagen*, also
+marked as done there) or created by rules when a case file enters a status:
+
+```yaml
+    follow_ups:
+      - code: chase_schools
+        title: Schulen nachfassen
+        status: profile_sent         # entering this status creates the follow-up
+        days: 14                     # due after 14 days
+        responsibility: responsible  # for the member responsible (optional)
+        close_on_leave: true         # default: closed when the status is left
+```
+
+`FollowUpController` lists the open follow-ups of all case files whose list the
+member may view (views *Meine fälligen*, *Meine*, *Überfällig*; bulk action
+*Als erledigt markieren*); route it in the project:
+
+```yaml
+SilverStripe\Control\Director:
+  rules:
+    'followups//$Action/$ID/$OtherID': Atwx\Flow\Controller\FollowUpController
+```
+
+Creating and closing appear in the timeline; follow-ups are deleted with the case file.
+
 ## Edit links
 
 People without an account work on a case file through an edit link. Members who

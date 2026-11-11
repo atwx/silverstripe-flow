@@ -157,6 +157,7 @@ class TransitionService
         $change->setField('CaseID', $case->ID);
         $change->setField('CaseClass', $case->ClassName);
         $change->write();
+        FollowUpService::singleton()->onStatusChange($case, $fromID, $toID, $actor?->flowMember());
         return $change;
     }
 
