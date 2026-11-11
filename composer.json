@@ -68,5 +68,8 @@
         "expose": []
     },
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "suggest": {
+        "atwx/silverstripe-headless-pdf": "PDF documents from templates (default PdfRenderer)"
+    }
 }

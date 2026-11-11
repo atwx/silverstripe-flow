@@ -14,6 +14,7 @@ de:
     WORKFLOW_REQUIRED: 'Der Eintrag muss zu einem Ablauf gehören.'
     FOREIGN_RECORD: 'Bitte einen Eintrag aus demselben Ablauf wählen.'
   Atwx\Flow\Model\Workflow:
+    has_many_DocumentTemplates: 'Vorlagen'
     has_many_Responsibilities: 'Zuständigkeiten'
     SINGULARNAME: 'Ablauf'
     PLURALNAME: 'Abläufe'
@@ -129,6 +130,11 @@ de:
     REQUIRED: 'Bitte eine Auswahl treffen.'
     DUPLICATE: 'Für diese Feldgruppe, Rolle und diesen Status gibt es bereits einen Eintrag.'
   Atwx\Flow\Controller\FlowCaseController:
+    DOCUMENT: 'Schreiben erstellen'
+    DOCUMENT_CREATE: 'Erstellen'
+    DOCUMENT_UNKNOWN: 'Unbekannte Vorlage.'
+    DOCUMENT_CREATED: 'Das Schreiben „{title}“ wurde erstellt.'
+    TIMELINE_DOCUMENT: 'Schreiben erstellt: {title}'
     ASSIGN: 'Zuständigkeit'
     ASSIGN_SAVE: 'Speichern'
     ASSIGN_NOBODY: '– niemand –'
@@ -230,3 +236,24 @@ de:
     ROLE_REQUIRED: 'Bitte eine interne Rolle dieses Ablaufs wählen.'
   Atwx\Flow\Service\AssignmentService:
     NOT_CANDIDATE: '{name} kann für „{responsibility}“ nicht zugewiesen werden.'
+  Atwx\Flow\Model\DocumentTemplate:
+    SINGULARNAME: 'Vorlage'
+    PLURALNAME: 'Vorlagen'
+    db_Code: 'Code'
+    db_Title: 'Titel'
+    db_DocumentTitle: 'Titel des Schreibens'
+    db_Body: 'Text'
+    db_Sort: 'Reihenfolge'
+    BODY_DESCRIPTION: 'HTML mit Platzhaltern: {{Feld}}, {{Beziehung.Feld}}, {{Flow.<Zusatzfeld>}}, {{Assignee.<Zuständigkeit>}}, {{Status}}, {{Today}}, {{Me.Name}}.'
+    DOCUMENT_TITLE_DESCRIPTION: 'Titel des erstellten Schreibens, mit Platzhaltern; sonst der Titel der Vorlage.'
+  Atwx\Flow\Model\CaseDocument:
+    SINGULARNAME: 'Schreiben'
+    PLURALNAME: 'Schreiben'
+    db_Title: 'Titel'
+    CREATED: 'Erstellt'
+    has_one_Member: 'Von'
+  Atwx\Flow\Controller\CaseDocumentSubController:
+    TITLE: 'Schreiben'
+  Atwx\Flow\Document\Placeholders:
+    YES: 'Ja'
+    NO: 'Nein'

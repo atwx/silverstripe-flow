@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Config;
 
 use Atwx\Flow\Model\CustomField;
+use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
@@ -153,6 +154,20 @@ class ConfigExporter
                 $entry['list'] = true;
             }
             $data['custom_fields'][] = $entry;
+        }
+
+        // Only written when there are templates, so older files stay unchanged.
+        $documents = [];
+        foreach (DocumentTemplate::get()->filter('WorkflowID', $workflow->ID) as $template) {
+            $entry = ['code' => $template->Code, 'title' => $template->Title];
+            if ($template->DocumentTitle) {
+                $entry['document_title'] = $template->DocumentTitle;
+            }
+            $entry['body'] = (string) $template->Body;
+            $documents[] = $entry;
+        }
+        if ($documents) {
+            $data['documents'] = $documents;
         }
 
         $roleSort = array_flip(FlowRole::get()->filter('WorkflowID', $workflow->ID)->column('ID'));

@@ -8,6 +8,7 @@ use Atwx\Flow\Actor\MemberActor;
 use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\Assignment;
 use Atwx\Flow\Model\AssignmentChange;
+use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
@@ -43,6 +44,7 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<AccessLink> FlowAccessLinks()
  * @method HasManyList<Assignment> FlowAssignments()
  * @method HasManyList<AssignmentChange> FlowAssignmentChanges()
+ * @method HasManyList<CaseDocument> FlowDocuments()
  * @extends Extension<DataObject&static>
  */
 class CaseFileExtension extends Extension
@@ -61,6 +63,7 @@ class CaseFileExtension extends Extension
         'FlowAccessLinks' => AccessLink::class . '.Case',
         'FlowAssignments' => Assignment::class . '.Case',
         'FlowAssignmentChanges' => AssignmentChange::class . '.Case',
+        'FlowDocuments' => CaseDocument::class . '.Case',
     ];
 
     /**
@@ -72,6 +75,7 @@ class CaseFileExtension extends Extension
         'FlowAccessLinks',
         'FlowAssignments',
         'FlowAssignmentChanges',
+        'FlowDocuments',
     ];
 
     /**

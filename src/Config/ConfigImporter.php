@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Config;
 
 use Atwx\Flow\Model\CustomField;
+use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
@@ -94,6 +95,7 @@ class ConfigImporter
             'transitions' => $this->importTransition(...),
             'field_groups' => $this->importFieldGroup(...),
             'custom_fields' => $this->importCustomField(...),
+            'documents' => $this->importDocumentTemplate(...),
             'permissions' => $this->importPermission(...),
         ];
         foreach ($sections as $key => $importer) {
@@ -242,6 +244,20 @@ class ConfigImporter
         $custom->ShowInList = (bool) ($definition['list'] ?? false);
         $custom->Sort = $index + 1;
         $this->save($custom, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importDocumentTemplate(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $template = $this->child(DocumentTemplate::class, $workflow, $code);
+        $template->Title = $this->string($definition, 'title', $path);
+        $template->DocumentTitle = (string) ($definition['document_title'] ?? '');
+        $template->Body = $this->string($definition, 'body', $path);
+        $template->Sort = $index + 1;
+        $this->save($template, "{$path} ({$code})");
     }
 
     /**

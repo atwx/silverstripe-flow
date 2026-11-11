@@ -8,7 +8,9 @@ use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\Assignment;
 use Atwx\Flow\Model\AssignmentChange;
+use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CustomField;
+use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\LinkAccess;
@@ -19,6 +21,7 @@ use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Service\AssignmentService;
+use Atwx\Flow\Service\DocumentService;
 use Atwx\Flow\Service\FieldAccess;
 use Atwx\Flow\Ui\CustomFieldUi;
 use Atwx\Flow\Ui\FlowFieldLayout;
@@ -27,6 +30,7 @@ use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController;
 use Atwx\SilverstripeFrontdeskKit\Filter\FilterCollection;
 use Atwx\SilverstripeFrontdeskKit\Filter\SelectFilter;
 use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
+use Atwx\SilverstripeFrontdeskKit\Table\ActionException;
 use Atwx\SilverstripeFrontdeskKit\Table\Column;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\ListView;
@@ -347,15 +351,30 @@ abstract class FlowCaseController extends FrontdeskController
 
     private static array $sub_controllers = [
         AccessLinkSubController::class,
+        CaseDocumentSubController::class,
     ];
 
     private static array $allowed_actions = [
         'links',
+        'documents',
     ];
 
     public function links(HTTPRequest $request): AccessLinkSubController
     {
         return AccessLinkSubController::create()->setParentContext($this, (int) $request->param('ID'));
+    }
+
+    public function documents(HTTPRequest $request): CaseDocumentSubController
+    {
+        return CaseDocumentSubController::create()->setParentContext($this, (int) $request->param('ID'));
+    }
+
+    /**
+     * A case file of this controller's list the member may view (null otherwise).
+     */
+    public function findCaseFile(int $id): ?DataObject
+    {
+        return $this->findRecord($id, 'canView');
     }
 
     /**
@@ -423,6 +442,9 @@ abstract class FlowCaseController extends FrontdeskController
             if ($item->Segment === $segment) {
                 $item->Title = _t(AccessLinkSubController::class . '.TITLE', 'Edit links');
             }
+            if ($item->Segment === CaseDocumentSubController::config()->get('url_segment')) {
+                $item->Title = _t(CaseDocumentSubController::class . '.TITLE', 'Documents');
+            }
         }
         return $data;
     }
@@ -433,6 +455,10 @@ abstract class FlowCaseController extends FrontdeskController
         $actor = $this->flowActor();
         if ($actor) {
             $actions = array_merge($actions, FlowRecordActions::forActor($record, $actor));
+        }
+        $document = $this->documentAction($record);
+        if ($document) {
+            $actions[] = $document;
         }
         $assign = $this->assignAction($record);
         if ($assign) {
@@ -448,6 +474,42 @@ abstract class FlowCaseController extends FrontdeskController
     /**
      * "Revoke edit link" with the usable links of the case file, for members who may edit.
      */
+    /**
+     * "Create document": one option per template, for members who may edit and
+     * have a role in the workflow.
+     */
+    protected function documentAction(DataObject $record): ?RecordAction
+    {
+        $templates = DocumentService::singleton()->templatesFor($record);
+        $actor = $this->flowActor();
+        $workflow = $this->flowWorkflow();
+        if (!$templates || !$actor || !$workflow || !$record->isInDB() || !$this->canEdit()) {
+            return null;
+        }
+        if ($actor->flowRoleCodes($workflow, $record) === []) {
+            return null;
+        }
+        $options = [];
+        foreach ($templates as $template) {
+            $options[(string) $template->ID] = (string) $template->Title;
+        }
+        return RecordAction::create('flowdocument', _t(self::class . '.DOCUMENT', 'Create document'))
+            ->options($options)
+            ->submitLabel(_t(self::class . '.DOCUMENT_CREATE', 'Create'))
+            ->handle(function (DataObject $record, ?string $option) {
+                $template = DocumentTemplate::get()->byID((int) $option);
+                if (!$template) {
+                    throw new ActionException(_t(self::class . '.DOCUMENT_UNKNOWN', 'Unknown template.'));
+                }
+                $document = DocumentService::singleton()->create($record, $template, Security::getCurrentUser());
+                return _t(
+                    self::class . '.DOCUMENT_CREATED',
+                    'Document "{title}" created.',
+                    ['title' => $document->Title]
+                );
+            });
+    }
+
     /**
      * "Responsibility": one select per responsibility, for members who may edit.
      */
@@ -532,6 +594,16 @@ abstract class FlowCaseController extends FrontdeskController
         $case = ['CaseClass' => $record->ClassName, 'CaseID' => $record->ID];
         foreach (StatusChange::get()->filter($case) as $change) {
             $entries->push($this->statusChangeEntry($change));
+        }
+        foreach (CaseDocument::get()->filter($case) as $document) {
+            $member = $document->Member();
+            $entries->push(TimelineEntry::create(
+                (string) $document->Created,
+                _t(self::class . '.TIMELINE_DOCUMENT', 'Document created: {title}', ['title' => $document->Title]),
+                '',
+                $member->exists() ? (string) $member->getName() : '',
+                'document'
+            ));
         }
         foreach (AssignmentChange::get()->filter($case) as $change) {
             $entries->push($this->assignmentChangeEntry($change));
