@@ -44,13 +44,11 @@ jobs:
         with:
           path: silverstripe-flow
 
-      # Temporarily the kit branch of atwx/silverstripe-frontdesk-kit#1
-      # (field layout, record actions, timeline); back to main once merged.
       - name: Checkout frontdesk-kit
         uses: actions/checkout@v4
         with:
           repository: atwx/silverstripe-frontdesk-kit
-          ref: flow-patterns
+          ref: main
           path: silverstripe-frontdesk-kit
 
       - name: Set up PHP
