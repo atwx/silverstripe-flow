@@ -215,6 +215,36 @@ class EventController extends FlowCaseController
 
 Extensions can add entries to the timeline with `updateFlowTimeline(ArrayList $entries, DataObject $record)`.
 
+## Responsibilities
+
+A workflow can name responsibilities ("Zuständigkeit"), e.g. *Verantwortlich*
+or *Wo ist die Akte?*: one member per case file, chosen from the members of an
+internal role. Maintained in the CMS (workflow → *Responsibilities*) or in the
+configuration file:
+
+```yaml
+    responsibilities:
+      - code: responsible
+        title: Verantwortlich
+        role: advisers          # its members can be assigned
+```
+
+`FlowCaseController` adds
+
+- the record action *Responsibility* (one select per responsibility) for members
+  who may edit and have a role in the workflow,
+- a list column and a filter per responsibility (`Assignee_<code>`),
+- the list view *My case files* (`?view=mine`),
+- the assignees in the header of record pages and every change in the timeline.
+
+```php
+AssignmentService::singleton()->assign($case, $responsibility, $member, $by);
+$case->flowAssignee('responsible');   // ?Member
+```
+
+Only candidates can be assigned; every change is stored (`AssignmentChange`).
+Assignments and their history are deleted with the case file.
+
 ## Edit links
 
 People without an account work on a case file through an edit link. Members who

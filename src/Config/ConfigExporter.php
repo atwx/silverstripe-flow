@@ -7,6 +7,7 @@ use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Phase;
+use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\Transition;
 use Atwx\Flow\Model\Workflow;
@@ -79,6 +80,20 @@ class ConfigExporter
                 $entry['group'] = $group->Code;
             }
             $data['roles'][] = $entry;
+        }
+
+        // Only written when there are responsibilities, so older files stay unchanged.
+        $responsibilities = [];
+        foreach (Responsibility::get()->filter('WorkflowID', $workflow->ID) as $responsibility) {
+            $role = $responsibility->Role();
+            $responsibilities[] = [
+                'code' => $responsibility->Code,
+                'title' => $responsibility->Title,
+                'role' => $role->exists() ? $role->Code : '',
+            ];
+        }
+        if ($responsibilities) {
+            $data['responsibilities'] = $responsibilities;
         }
 
         $data['phases'] = [];

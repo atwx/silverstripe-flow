@@ -28,6 +28,7 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<FieldGroup> FieldGroups()
  * @method HasManyList<FieldPermission> FieldPermissions()
  * @method HasManyList<CustomField> CustomFields()
+ * @method HasManyList<Responsibility> Responsibilities()
  */
 class Workflow extends DataObject
 {
@@ -53,9 +54,11 @@ class Workflow extends DataObject
         'FieldGroups' => FieldGroup::class,
         'FieldPermissions' => FieldPermission::class,
         'CustomFields' => CustomField::class,
+        'Responsibilities' => Responsibility::class,
     ];
 
     private static array $cascade_deletes = [
+        'Responsibilities',
         'CustomFields',
         'FieldPermissions',
         'FieldGroups',
@@ -107,7 +110,10 @@ class Workflow extends DataObject
         }
 
         // Child records can only be created inside their workflow, never linked across workflows.
-        foreach (['Phases', 'Statuses', 'Transitions', 'Roles', 'FieldPermissions', 'CustomFields'] as $relation) {
+        $relations = [
+            'Phases', 'Statuses', 'Transitions', 'Roles', 'FieldPermissions', 'CustomFields', 'Responsibilities',
+        ];
+        foreach ($relations as $relation) {
             $grid = $fields->dataFieldByName($relation);
             if ($grid instanceof GridField) {
                 $grid->setConfig(GridFieldConfig_RecordEditor::create());

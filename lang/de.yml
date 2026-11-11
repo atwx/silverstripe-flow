@@ -14,6 +14,7 @@ de:
     WORKFLOW_REQUIRED: 'Der Eintrag muss zu einem Ablauf gehören.'
     FOREIGN_RECORD: 'Bitte einen Eintrag aus demselben Ablauf wählen.'
   Atwx\Flow\Model\Workflow:
+    has_many_Responsibilities: 'Zuständigkeiten'
     SINGULARNAME: 'Ablauf'
     PLURALNAME: 'Abläufe'
     db_Code: 'Code'
@@ -128,6 +129,14 @@ de:
     REQUIRED: 'Bitte eine Auswahl treffen.'
     DUPLICATE: 'Für diese Feldgruppe, Rolle und diesen Status gibt es bereits einen Eintrag.'
   Atwx\Flow\Controller\FlowCaseController:
+    ASSIGN: 'Zuständigkeit'
+    ASSIGN_SAVE: 'Speichern'
+    ASSIGN_NOBODY: '– niemand –'
+    ASSIGN_NOBODY_SHORT: 'niemand'
+    ASSIGN_DONE: 'Zuständigkeit geändert.'
+    ASSIGN_UNCHANGED: 'Nichts geändert.'
+    TIMELINE_ASSIGN: '{responsibility}: {from} → {to}'
+    VIEW_MINE: 'Meine Fälle'
     STATUS: 'Status'
     PHASE: 'Phase'
     TIMELINE: 'Verlauf'
@@ -210,3 +219,14 @@ de:
     OPTIONS_DESCRIPTION: 'Für „Auswahl“: eine Option je Zeile als „wert: Bezeichnung“, z. B. „einsteiger: Einsteiger“. Gespeichert wird der Wert.'
     OPTIONS_REQUIRED: 'Bitte die Optionen angeben.'
     TYPE_REQUIRED: 'Bitte einen Typ wählen.'
+  Atwx\Flow\Model\Responsibility:
+    SINGULARNAME: 'Zuständigkeit'
+    PLURALNAME: 'Zuständigkeiten'
+    db_Code: 'Code'
+    db_Title: 'Titel'
+    db_Sort: 'Reihenfolge'
+    has_one_Role: 'Rolle'
+    ROLE_DESCRIPTION: 'Mitglieder dieser Rolle können zugewiesen werden.'
+    ROLE_REQUIRED: 'Bitte eine interne Rolle dieses Ablaufs wählen.'
+  Atwx\Flow\Service\AssignmentService:
+    NOT_CANDIDATE: '{name} kann für „{responsibility}“ nicht zugewiesen werden.'
