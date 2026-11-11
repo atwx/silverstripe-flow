@@ -17,10 +17,12 @@ use SilverStripe\Security\Member;
  * @property int $FromID
  * @property int $ToID
  * @property int $MemberID
+ * @property int $AccessLinkID
  * @method DataObject Case()
  * @method Status From()
  * @method Status To()
  * @method Member Member()
+ * @method AccessLink AccessLink()
  */
 class StatusChange extends DataObject
 {
@@ -35,6 +37,7 @@ class StatusChange extends DataObject
         'From' => Status::class,
         'To' => Status::class,
         'Member' => Member::class,
+        'AccessLink' => AccessLink::class,
     ];
 
     private static array $summary_fields = [
@@ -46,6 +49,19 @@ class StatusChange extends DataObject
     ];
 
     private static string $default_sort = 'Created DESC, ID DESC';
+
+    /**
+     * Who did it: the member, or the person of the edit link.
+     */
+    public function getActorName(): string
+    {
+        $member = $this->Member();
+        if ($member->exists()) {
+            return (string) $member->getName();
+        }
+        $link = $this->AccessLink();
+        return $link->exists() ? $link->getLabel() : '';
+    }
 
     /**
      * Visible to whoever may view the case file.

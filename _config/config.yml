@@ -8,3 +8,13 @@ SilverStripe\Cli\Sake:
   commands:
     'flow:import-config': Atwx\Flow\Cli\ImportConfigCommand
     'flow:export-config': Atwx\Flow\Cli\ExportConfigCommand
+
+---
+Name: silverstripe-flow-routes
+After:
+  - '#rootroutes'
+  - '#coreroutes'
+---
+SilverStripe\Control\Director:
+  rules:
+    'flow/link': Atwx\Flow\Controller\AccessLinkController

@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Service;
 
+use Atwx\Flow\Actor\AccessLinkActor;
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\Status;
@@ -150,6 +151,7 @@ class TransitionService
             'FromID' => $fromID,
             'ToID' => $toID,
             'MemberID' => (int) $actor?->flowMember()?->ID,
+            'AccessLinkID' => $actor instanceof AccessLinkActor ? $actor->getLink()->ID : 0,
             'Comment' => $comment,
         ]);
         $change->setField('CaseID', $case->ID);

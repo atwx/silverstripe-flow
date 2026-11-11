@@ -4,16 +4,18 @@ namespace Atwx\Flow\Controller;
 
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
-use Atwx\Flow\Extension\CaseFileExtension;
+use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
+use Atwx\Flow\Model\LinkAccess;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Phase;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Service\FieldAccess;
-use Atwx\Flow\Service\TransitionService;
+use Atwx\Flow\Ui\FlowFieldLayout;
+use Atwx\Flow\Ui\FlowRecordActions;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController;
 use Atwx\SilverstripeFrontdeskKit\Filter\FilterCollection;
 use Atwx\SilverstripeFrontdeskKit\Filter\SelectFilter;
@@ -22,6 +24,7 @@ use Atwx\SilverstripeFrontdeskKit\Table\Column;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\RecordAction;
 use Atwx\SilverstripeFrontdeskKit\Table\TimelineEntry;
+use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Model\ArrayData;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
@@ -74,19 +77,7 @@ abstract class FlowCaseController extends FrontdeskController
             $record = $class::create();
             $record->setField('FlowStatusID', (int) $workflow->InitialStatusID);
         }
-
-        $layout = FieldLayout::create()->setDefaultLevel(FieldLayout::HIDDEN);
-        $declared = FieldGroup::declaredFor($record->ClassName);
-        foreach (FieldGroup::get()->filter('WorkflowID', $workflow->ID) as $group) {
-            if (isset($declared[$group->Code])) {
-                $layout->group((string) $group->Title, $declared[$group->Code]['fields']);
-            }
-        }
-        $actor = $this->flowActor();
-        if ($actor) {
-            $layout->setLevels(FieldAccess::singleton()->fieldLevels($record, $actor));
-        }
-        return $layout;
+        return FlowFieldLayout::build($record, $this->flowActor());
     }
 
     // ─── List ────────────────────────────────────────────────────────────────
@@ -173,59 +164,82 @@ abstract class FlowCaseController extends FrontdeskController
             );
     }
 
-    // ─── Status change ───────────────────────────────────────────────────────
+    // ─── Record actions and edit links ───────────────────────────────────────
+
+    private static array $sub_controllers = [
+        AccessLinkSubController::class,
+    ];
+
+    private static array $allowed_actions = [
+        'links',
+    ];
+
+    public function links(HTTPRequest $request): AccessLinkSubController
+    {
+        return AccessLinkSubController::create()->setParentContext($this, (int) $request->param('ID'));
+    }
+
+    /**
+     * Only members who may edit see the edit links.
+     *
+     * @return ArrayList<ArrayData>
+     */
+    protected function getSubControllerData(DataObject $record): ArrayList
+    {
+        $data = parent::getSubControllerData($record);
+        $segment = AccessLinkSubController::config()->get('url_segment');
+        if (!$this->canEdit()) {
+            return $data->exclude('Segment', $segment);
+        }
+        foreach ($data as $item) {
+            if ($item->Segment === $segment) {
+                $item->Title = _t(AccessLinkSubController::class . '.TITLE', 'Edit links');
+            }
+        }
+        return $data;
+    }
 
     protected function defineRecordActions(DataObject $record): array
     {
         $actions = parent::defineRecordActions($record);
         $actor = $this->flowActor();
-        if (!$actor) {
-            return $actions;
+        if ($actor) {
+            $actions = array_merge($actions, FlowRecordActions::forActor($record, $actor));
         }
-        $status = $this->statusAction($record, $actor);
-        if ($status) {
-            $actions[] = $status;
-        }
-        if ($record->hasMethod('canAddFlowNote') && $record->canAddFlowNote($actor)) {
-            $actions[] = RecordAction::create('flownote', _t(self::class . '.ADD_NOTE', 'Add note'))
-                ->withComment(_t(self::class . '.NOTE', 'Note'), true)
-                ->submitLabel(_t(self::class . '.SAVE_NOTE', 'Save note'))
-                ->handle(function (DataObject $record, ?string $option, string $text) use ($actor) {
-                    /** @var DataObject&CaseFileExtension $record */
-                    $record->addFlowNote($text, $actor);
-                    return _t(self::class . '.NOTE_ADDED', 'The note has been added.');
-                });
+        $revoke = $this->revokeLinkAction($record);
+        if ($revoke) {
+            $actions[] = $revoke;
         }
         return $actions;
     }
 
     /**
-     * "Change status" with the transitions the actor may perform, or null if none.
+     * "Revoke edit link" with the usable links of the case file, for members who may edit.
      */
-    protected function statusAction(DataObject $record, FlowActor $actor): ?RecordAction
+    protected function revokeLinkAction(DataObject $record): ?RecordAction
     {
+        if (!$this->canEdit()) {
+            return null;
+        }
         $options = [];
-        foreach (TransitionService::singleton()->availableTransitions($record, $actor) as $transition) {
-            $to = $transition->To();
-            if ($to->exists()) {
-                $options[$to->Code] = $transition->getLabel();
+        $links = AccessLink::get()->filter(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID]);
+        foreach ($links as $link) {
+            if ($link->isUsable()) {
+                $options[(string) $link->ID] = $link->getLabel();
             }
         }
         if ($options === []) {
             return null;
         }
-        return RecordAction::create('flowstatus', _t(self::class . '.CHANGE_STATUS', 'Change status'))
+        return RecordAction::create('flowrevoke', _t(self::class . '.REVOKE_LINK', 'Revoke edit link'))
             ->options($options)
-            ->withComment(_t(self::class . '.COMMENT', 'Comment (optional)'))
-            ->submitLabel(_t(self::class . '.CHANGE_STATUS', 'Change status'))
-            ->handle(function (DataObject $record, ?string $option, string $comment) use ($actor) {
-                $change = TransitionService::singleton()->transition($record, (string) $option, $actor, $comment);
-                $to = $change->To();
-                return _t(
-                    self::class . '.STATUS_CHANGED',
-                    'The status is now "{status}".',
-                    ['status' => $to->exists() ? $to->Title : '']
-                );
+            ->description(_t(self::class . '.REVOKE_DESCRIPTION', 'The link stops working immediately.'))
+            ->handle(function (DataObject $record, ?string $option) {
+                $link = AccessLink::get()
+                    ->filter(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID])
+                    ->byID((int) $option);
+                $link?->revoke();
+                return _t(self::class . '.LINK_REVOKED', 'The edit link has been revoked.');
             });
     }
 
@@ -237,20 +251,57 @@ abstract class FlowCaseController extends FrontdeskController
     protected function defineTimeline(DataObject $record): ?ArrayList
     {
         $entries = ArrayList::create();
-        $changes = StatusChange::get()->filter(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID]);
-        foreach ($changes as $change) {
+        $case = ['CaseClass' => $record->ClassName, 'CaseID' => $record->ID];
+        foreach (StatusChange::get()->filter($case) as $change) {
             $entries->push($this->statusChangeEntry($change));
         }
-        $notes = Note::get()->filter(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID]);
-        foreach ($notes as $note) {
-            $member = $note->Member();
+        foreach (Note::get()->filter($case) as $note) {
             $entries->push(TimelineEntry::create(
                 (string) $note->Created,
                 _t(self::class . '.NOTE', 'Note'),
                 (string) $note->Text,
-                $member->exists() ? (string) $member->getName() : '',
+                $note->getActorName(),
                 'note'
             ));
+        }
+        foreach (AccessLink::get()->filter($case) as $link) {
+            $creator = $link->CreatedBy();
+            $entries->push(TimelineEntry::create(
+                (string) $link->Created,
+                _t(
+                    self::class . '.TIMELINE_LINK_CREATED',
+                    'Edit link created for {name}',
+                    ['name' => $link->getLabel()]
+                ),
+                '',
+                $creator->exists() ? (string) $creator->getName() : '',
+                'link'
+            ));
+            if ($link->RevokedAt) {
+                $entries->push(TimelineEntry::create(
+                    (string) $link->RevokedAt,
+                    _t(
+                        self::class . '.TIMELINE_LINK_REVOKED',
+                        'Edit link revoked: {name}',
+                        ['name' => $link->getLabel()]
+                    ),
+                    '',
+                    '',
+                    'link'
+                ));
+            }
+            foreach ($link->Accesses() as $access) {
+                $saved = $access->Kind === LinkAccess::SAVE;
+                $entries->push(TimelineEntry::create(
+                    (string) $access->Created,
+                    $saved
+                        ? _t(self::class . '.TIMELINE_LINK_SAVED', 'Edited via link')
+                        : _t(self::class . '.TIMELINE_LINK_VIEWED', 'Opened via link'),
+                    $saved ? (string) $access->Fields : '',
+                    $link->getLabel(),
+                    'access'
+                ));
+            }
         }
         $this->extend('updateFlowTimeline', $entries, $record);
         return $entries;
@@ -264,12 +315,11 @@ abstract class FlowCaseController extends FrontdeskController
         $title = $from->exists()
             ? _t(self::class . '.TIMELINE_CHANGE', 'Status: {from} → {to}', ['from' => $from->Title, 'to' => $toTitle])
             : _t(self::class . '.TIMELINE_CREATED', 'Created, status: {to}', ['to' => $toTitle]);
-        $member = $change->Member();
         return TimelineEntry::create(
             (string) $change->Created,
             $title,
             (string) $change->Comment,
-            $member->exists() ? (string) $member->getName() : '',
+            $change->getActorName(),
             'status'
         );
     }

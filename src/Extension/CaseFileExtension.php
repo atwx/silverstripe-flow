@@ -2,8 +2,10 @@
 
 namespace Atwx\Flow\Extension;
 
+use Atwx\Flow\Actor\AccessLinkActor;
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
+use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
@@ -34,6 +36,7 @@ use SilverStripe\ORM\HasManyList;
  * @method Status FlowStatus()
  * @method HasManyList<StatusChange> FlowStatusChanges()
  * @method HasManyList<Note> FlowNotes()
+ * @method HasManyList<AccessLink> FlowAccessLinks()
  * @extends Extension<DataObject&static>
  */
 class CaseFileExtension extends Extension
@@ -45,6 +48,7 @@ class CaseFileExtension extends Extension
     private static array $has_many = [
         'FlowStatusChanges' => StatusChange::class . '.Case',
         'FlowNotes' => Note::class . '.Case',
+        'FlowAccessLinks' => AccessLink::class . '.Case',
     ];
 
     /**
@@ -53,6 +57,7 @@ class CaseFileExtension extends Extension
     private static array $cascade_deletes = [
         'FlowStatusChanges',
         'FlowNotes',
+        'FlowAccessLinks',
     ];
 
     /**
@@ -153,6 +158,7 @@ class CaseFileExtension extends Extension
         $note = Note::create([
             'Text' => $text,
             'MemberID' => (int) $actor->flowMember()?->ID,
+            'AccessLinkID' => $actor instanceof AccessLinkActor ? $actor->getLink()->ID : 0,
         ]);
         $note->setField('CaseID', $owner->ID);
         $note->setField('CaseClass', $owner->ClassName);
@@ -210,10 +216,11 @@ class CaseFileExtension extends Extension
         $labels['FlowStatusID'] = $labels['FlowStatus'];
         $labels['FlowStatusChanges'] = _t(self::class . '.has_many_FlowStatusChanges', 'Status history');
         $labels['FlowNotes'] = _t(self::class . '.has_many_FlowNotes', 'Notes');
+        $labels['FlowAccessLinks'] = _t(self::class . '.has_many_FlowAccessLinks', 'Edit links');
     }
 
     protected function updateCMSFields(FieldList $fields): void
     {
-        $fields->removeByName(['FlowStatusID', 'FlowStatus', 'FlowStatusChanges', 'FlowNotes']);
+        $fields->removeByName(['FlowStatusID', 'FlowStatus', 'FlowStatusChanges', 'FlowNotes', 'FlowAccessLinks']);
     }
 }

@@ -89,6 +89,24 @@ class EventController extends FlowCaseController
 
 Extensions can add entries to the timeline with `updateFlowTimeline(ArrayList $entries, DataObject $record)`.
 
+## Edit links
+
+People without an account work on a case file through an edit link. Members who
+may edit create links in the case file (sub-list "Edit links": name, optional
+email, external role, optional expiry date); the link is shown once and, with an
+email address, sent to the person. Only a SHA-256 hash of the 32-byte token is
+stored.
+
+The link page `/flow/link/<token>` (`AccessLinkController`, built on the kit's
+`StandaloneRecordController`) shows the fields of the link's role, saves only
+writable fields and offers only the role's transitions. A link works until it is
+revoked ("Revoke edit link" in the case file), its expiry date has passed or the
+case file reaches a final status; otherwise the page answers 404. Opening the
+page, saving, status changes and notes via a link appear in the timeline.
+
+Projects override the main template `FrontdeskStandalonePage` to load their own
+styles.
+
 ## Field groups and permissions
 
 The domain class groups its fields; permissions are granted per group, role and
