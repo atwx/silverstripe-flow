@@ -122,3 +122,12 @@ de:
     ALL_STATUSES: 'alle Status'
     REQUIRED: 'Bitte eine Auswahl treffen.'
     DUPLICATE: 'Für diese Feldgruppe, Rolle und diesen Status gibt es bereits einen Eintrag.'
+  Atwx\Flow\Controller\FlowCaseController:
+    STATUS: 'Status'
+    PHASE: 'Phase'
+    CHANGE_STATUS: 'Status ändern'
+    COMMENT: 'Kommentar (optional)'
+    STATUS_CHANGED: 'Der Status ist jetzt „{status}“.'
+    TIMELINE: 'Verlauf'
+    TIMELINE_CHANGE: 'Status: {from} → {to}'
+    TIMELINE_CREATED: 'Angelegt, Status: {to}'

@@ -1,0 +1,178 @@
+<?php
+
+namespace Atwx\Flow\Tests\Controller;
+
+use Atwx\Flow\Config\ConfigImporter;
+use Atwx\Flow\Extension\CaseFileExtension;
+use Atwx\Flow\Model\Status;
+use Atwx\Flow\Model\Workflow;
+use Atwx\Flow\Service\TransitionException;
+use Atwx\Flow\Tests\Stubs\TestApplication;
+use Atwx\Flow\Tests\Stubs\TestCourse;
+use Atwx\Flow\Tests\Stubs\TestCourseController;
+use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
+use Atwx\SilverstripeFrontdeskKit\Table\ActionException;
+use SilverStripe\Dev\SapphireTest;
+use SilverStripe\i18n\i18n;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\Security\Group;
+use SilverStripe\Security\Member;
+
+class FlowCaseControllerTest extends SapphireTest
+{
+    protected $usesDatabase = true;
+
+    /**
+     * @var array<int, class-string<DataObject>>
+     */
+    protected static $extra_dataobjects = [
+        TestCourse::class,
+        TestApplication::class,
+    ];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // UI texts are checked in German (lang/de.yml).
+        i18n::set_locale('de_DE');
+        ConfigImporter::create()->importFile(__DIR__ . '/../Config/config.yml');
+    }
+
+    private function logInTo(string $groupCode): void
+    {
+        $member = Member::create(['Email' => $groupCode . '@example.com', 'FirstName' => ucfirst($groupCode)]);
+        $member->write();
+        $group = Group::get()->find('Code', $groupCode);
+        $this->assertNotNull($group);
+        $member->Groups()->add($group);
+        $this->logInAs($member);
+    }
+
+    private function courseIn(string $status): TestCourse
+    {
+        $course = TestCourse::create(['Title' => 'Kurs', 'Venue' => 'Marburg', 'InternalNote' => 'geheim']);
+        $statusID = Status::get()->filter(['Code' => $status, 'Workflow.Code' => 'course'])->first()?->ID;
+        CaseFileExtension::writeStatus($course, (int) $statusID);
+        return $course;
+    }
+
+    public function testLayoutUsesGroupsAndLevels(): void
+    {
+        $this->logInTo('readers');
+        $layout = TestCourseController::create()->layout($this->courseIn('draft'));
+
+        $this->assertInstanceOf(FieldLayout::class, $layout);
+        $this->assertSame(['Eckdaten', 'Ausschreibung', 'Organisation'], array_column($layout->getGroups(), 'title'));
+        $this->assertSame('read', $layout->levelFor('Title'));
+        $this->assertSame('read', $layout->levelFor('InternalNote'));
+        $this->assertSame('hidden', $layout->levelFor('NotInAnyGroup'), 'default is hidden');
+    }
+
+    public function testLayoutForNewRecordUsesInitialStatus(): void
+    {
+        $workflow = Workflow::get()->find('Code', 'course');
+        $this->assertNotNull($workflow);
+        $workflow->InitialStatusID = (int) Status::get()
+            ->filter(['Code' => 'done', 'WorkflowID' => $workflow->ID])
+            ->first()?->ID;
+        $workflow->write();
+        $this->logInTo('organisers');
+
+        $layout = TestCourseController::create()->layout(null);
+        $this->assertNotNull($layout);
+        $this->assertSame('read', $layout->levelFor('Description'), 'announcement is read-only in "done"');
+        $this->assertSame('write', $layout->levelFor('Title'));
+    }
+
+    public function testWithoutLoginEverythingIsHidden(): void
+    {
+        $layout = TestCourseController::create()->layout($this->courseIn('draft'));
+        $this->assertNotNull($layout);
+        $this->assertSame('hidden', $layout->levelFor('Title'));
+        $this->assertSame([], TestCourseController::create()->recordActions($this->courseIn('draft')));
+    }
+
+    public function testStatusActionOffersAllowedTransitions(): void
+    {
+        $this->logInTo('organisers');
+        $course = $this->courseIn('draft');
+        $actions = TestCourseController::create()->recordActions($course);
+
+        $this->assertCount(1, $actions);
+        $this->assertSame('flowstatus', $actions[0]->getName());
+        $this->assertSame(['with_speaker' => 'An Referent:in senden'], $actions[0]->getOptions());
+
+        $message = $actions[0]->run($course, 'with_speaker', 'los');
+        $this->assertIsString($message);
+        $this->assertStringContainsString('Bei Referent:in', $message);
+        $stored = TestCourse::get()->byID($course->ID);
+        $this->assertSame('with_speaker', Status::get()->byID((int) $stored?->FlowStatusID)?->Code);
+    }
+
+    public function testNoStatusActionWithoutTransitions(): void
+    {
+        $this->logInTo('readers');
+        $this->assertSame([], TestCourseController::create()->recordActions($this->courseIn('draft')));
+    }
+
+    public function testRefusedTransitionBecomesActionError(): void
+    {
+        $this->assertInstanceOf(ActionException::class, new TransitionException('x'));
+
+        $this->logInTo('organisers');
+        $course = $this->courseIn('draft');
+        $action = TestCourseController::create()->recordActions($course)[0];
+
+        // Someone else changes the status in the meantime.
+        $copy = TestCourse::get()->byID($course->ID);
+        $this->assertNotNull($copy);
+        $copy->transitionTo('with_speaker');
+
+        $this->expectException(ActionException::class);
+        $action->run($course, 'with_speaker', '');
+    }
+
+    public function testTimelineShowsStatusHistory(): void
+    {
+        $this->logInTo('organisers');
+        $course = TestCourse::create(['Title' => 'Neu']);
+        $course->write();
+        $course->transitionTo('with_speaker', null, 'Bitte ausfüllen');
+
+        $timeline = TestCourseController::create()->timeline($course);
+        $this->assertNotNull($timeline);
+        $titles = $timeline->column('Title');
+        $this->assertContains('Angelegt, Status: Entwurf', $titles);
+        $this->assertContains('Status: Entwurf → Bei Referent:in', $titles);
+        $this->assertContains('Bitte ausfüllen', $timeline->column('Text'));
+        $this->assertContains('Organisers', $timeline->column('Author'));
+    }
+
+    public function testColumnsHideFieldsTheMemberMayNotRead(): void
+    {
+        $this->logInTo('readers');
+        $columns = TestCourseController::create()->columns();
+        $course = $this->courseIn('draft');
+
+        $values = [];
+        foreach ($columns as $column) {
+            $values[$column->getName()] = (string) $column->renderValue($course);
+        }
+        $this->assertSame('Kurs', $values['Title']);
+        $this->assertSame('geheim', $values['InternalNote'], 'readers may read organisation');
+        $this->assertSame('Entwurf', $values['FlowStatus.Title']);
+        $this->assertSame('Planung', $values['FlowStatus.Phase.Title']);
+
+        // An actor without the organisation group sees no internal note.
+        $this->logOut();
+        $member = Member::create(['Email' => 'nobody@example.com']);
+        $member->write();
+        $this->logInAs($member);
+        $columns = TestCourseController::create()->columns();
+        foreach ($columns as $column) {
+            if ($column->getName() === 'InternalNote') {
+                $this->assertSame('', (string) $column->renderValue($course));
+            }
+        }
+    }
+}

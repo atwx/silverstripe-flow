@@ -1,0 +1,47 @@
+<?php
+
+namespace Atwx\Flow\Tests\Stubs;
+
+use Atwx\Flow\Controller\FlowCaseController;
+use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
+use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
+use Atwx\SilverstripeFrontdeskKit\Table\RecordAction;
+use SilverStripe\Dev\TestOnly;
+use SilverStripe\Model\List\ArrayList;
+use SilverStripe\ORM\DataObject;
+
+/**
+ * Case controller for the test course; exposes the protected hooks.
+ */
+class TestCourseController extends FlowCaseController implements TestOnly
+{
+    private static string $managed_model = TestCourse::class;
+
+    private static string $url_segment = 'test-courses';
+
+    public function layout(?DataObject $record): ?FieldLayout
+    {
+        return $this->defineFieldLayout($record);
+    }
+
+    /**
+     * @return RecordAction[]
+     */
+    public function recordActions(DataObject $record): array
+    {
+        return $this->defineRecordActions($record);
+    }
+
+    /**
+     * @return ArrayList<\SilverStripe\Model\ArrayData>|null
+     */
+    public function timeline(DataObject $record): ?ArrayList
+    {
+        return $this->defineTimeline($record);
+    }
+
+    public function columns(): ColumnCollection
+    {
+        return $this->defineColumns();
+    }
+}

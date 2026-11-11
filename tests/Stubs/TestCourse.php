@@ -32,6 +32,12 @@ class TestCourse extends DataObject implements TestOnly
         'InternalNote' => 'Text',
     ];
 
+    private static array $summary_fields = [
+        'Title',
+        'Venue',
+        'InternalNote',
+    ];
+
     private static array $flow_field_groups = [
         'basics' => ['title' => 'Eckdaten', 'fields' => ['Title', 'Venue']],
         'announcement' => ['title' => 'Ausschreibung', 'fields' => ['Description', 'Audience']],

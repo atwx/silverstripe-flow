@@ -69,6 +69,26 @@ workflows:
 The export writes the same canonical format, so an exported file can be imported
 again unchanged.
 
+## Frontdesk controller
+
+`FlowCaseController` is a frontdesk-kit controller for case files. It arranges the
+form and the record view by field group with the member's access levels (changes
+to fields that are not writable are reset on save), adds status and phase as
+columns and filters (cells of fields the member may not read stay empty, also in
+the export), offers "Change status" with the member's transitions, and shows the
+status history as timeline.
+
+```php
+class EventController extends FlowCaseController
+{
+    private static string $managed_model = Event::class;
+    private static string $url_segment = 'events';
+    private static string $title = 'Veranstaltungen';
+}
+```
+
+Extensions can add entries to the timeline with `updateFlowTimeline(ArrayList $entries, DataObject $record)`.
+
 ## Field groups and permissions
 
 The domain class groups its fields; permissions are granted per group, role and
