@@ -20,6 +20,55 @@ phases, statuses, transitions (with the roles allowed to perform them) and roles
 (internal roles map to a security group, external roles act through edit links).
 Every record has a stable `Code` for configuration files and hooks.
 
+### Import and export
+
+The configuration can be imported from and exported to YAML, e.g. as start
+configuration of an installation, for tests, or to move a workflow from a test
+system to live:
+
+```sh
+vendor/bin/sake flow:import-config app/_flow/config.yml
+vendor/bin/sake flow:export-config [file] [--workflow=code]
+```
+
+The import matches records by code, creates or updates them and deletes nothing.
+Groups of internal roles are matched by their code and created if missing. An
+invalid entry aborts the whole import. Lists define the order (`Sort`).
+
+```yaml
+workflows:
+  - code: event
+    title: Veranstaltung
+    class: App\Models\Event
+    initial_status: draft
+    roles:
+      - code: organisers
+        title: Organisation
+        group: organisers          # security group code
+      - code: speaker
+        title: 'Referent:in'
+        external: true             # acts through edit links only
+    phases:
+      - code: planning
+        title: Planung
+    statuses:
+      - code: draft
+        title: Entwurf
+        phase: planning
+      - code: done
+        title: Abgeschlossen
+        phase: planning
+        final: true
+    transitions:
+      - from: draft
+        to: done
+        title: Abschließen         # optional label of the action
+        roles: [organisers]
+```
+
+The export writes the same canonical format, so an exported file can be imported
+again unchanged.
+
 ## Case files
 
 Any data class becomes a case file through the extension:

@@ -1,0 +1,69 @@
+workflows:
+  - code: application
+    title: Antrag
+    class: Atwx\Flow\Tests\Stubs\TestApplication
+    initial_status: received
+    roles:
+      - code: clerk
+        title: Sachbearbeitung
+        group: clerks
+    phases:
+      - code: intake
+        title: Eingang
+    statuses:
+      - code: received
+        title: Eingegangen
+        phase: intake
+      - code: approved
+        title: Bewilligt
+        phase: intake
+        final: true
+    transitions:
+      - from: received
+        to: approved
+        roles: [clerk]
+  - code: course
+    title: Kurs
+    class: Atwx\Flow\Tests\Stubs\TestCourse
+    initial_status: draft
+    roles:
+      - code: organisers
+        title: Organisation
+        group: organisers
+      - code: readers
+        title: Lesend
+        group: readers
+      - code: speaker
+        title: 'Referent:in'
+        external: true
+    phases:
+      - code: planning
+        title: Planung
+      - code: execution
+        title: Durchführung
+    statuses:
+      - code: draft
+        title: Entwurf
+        phase: planning
+      - code: with_speaker
+        title: 'Bei Referent:in'
+        phase: planning
+      - code: review
+        title: 'In Prüfung'
+        phase: planning
+      - code: done
+        title: Abgeschlossen
+        phase: execution
+        final: true
+    transitions:
+      - from: draft
+        to: with_speaker
+        title: 'An Referent:in senden'
+        roles: [organisers]
+      - from: with_speaker
+        to: review
+        title: 'Fertig, an Organisation zurück'
+        roles: [speaker]
+      - from: review
+        to: done
+        roles: [organisers]

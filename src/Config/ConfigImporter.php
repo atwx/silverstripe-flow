@@ -1,0 +1,268 @@
+<?php
+
+namespace Atwx\Flow\Config;
+
+use Atwx\Flow\Model\FlowRole;
+use Atwx\Flow\Model\Phase;
+use Atwx\Flow\Model\Status;
+use Atwx\Flow\Model\Transition;
+use Atwx\Flow\Model\Workflow;
+use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\Core\Validation\ValidationException;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\DB;
+use SilverStripe\Security\Group;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Yaml;
+
+/**
+ * Imports workflow configuration from YAML (see README for the format).
+ *
+ * Records are matched by their code and created or updated; nothing is deleted.
+ * Groups of internal roles are matched by their code and created if missing.
+ * The whole import runs in one transaction: an invalid entry imports nothing.
+ */
+class ConfigImporter
+{
+    use Injectable;
+
+    /**
+     * Counts of created and updated records, keyed by type.
+     *
+     * @var array<string, array{created: int, updated: int}>
+     */
+    private array $stats = [];
+
+    /**
+     * @return array<string, array{created: int, updated: int}>
+     */
+    public function importFile(string $path): array
+    {
+        if (!is_readable($path)) {
+            throw new ConfigException("File not found: {$path}");
+        }
+        try {
+            $data = Yaml::parseFile($path);
+        } catch (ParseException $e) {
+            throw new ConfigException("Invalid YAML in {$path}: " . $e->getMessage(), 0, $e);
+        }
+        return $this->import(is_array($data) ? $data : []);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, array{created: int, updated: int}>
+     */
+    public function import(array $data): array
+    {
+        $this->stats = [];
+        $workflows = $data['workflows'] ?? null;
+        if (!is_array($workflows)) {
+            throw new ConfigException('The file must contain a list "workflows".');
+        }
+        DB::get_conn()->withTransaction(function () use ($workflows) {
+            foreach ($workflows as $index => $definition) {
+                $this->importWorkflow($this->map($definition, "workflows[{$index}]"), "workflows[{$index}]");
+            }
+        });
+        return $this->stats;
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importWorkflow(array $definition, string $path): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $path = "workflow {$code}";
+
+        $workflow = Workflow::get()->find('Code', $code) ?? Workflow::create(['Code' => $code]);
+        $workflow->Title = $this->string($definition, 'title', $path);
+        $workflow->CaseClass = $this->string($definition, 'class', $path);
+        $this->save($workflow, $path);
+
+        // Order matters: statuses need phases, transitions need statuses and roles.
+        $sections = [
+            'roles' => $this->importRole(...),
+            'phases' => $this->importPhase(...),
+            'statuses' => $this->importStatus(...),
+            'transitions' => $this->importTransition(...),
+        ];
+        foreach ($sections as $key => $importer) {
+            foreach ($this->list($definition, $key, $path) as $index => $entry) {
+                $entryPath = "{$path}, {$key}[{$index}]";
+                $importer($workflow, $this->map($entry, $entryPath), $entryPath, $index);
+            }
+        }
+
+        $initial = $definition['initial_status'] ?? null;
+        $workflow->InitialStatusID = $initial === null
+            ? 0
+            : $this->status($workflow, (string) $initial, "{$path}, initial_status")->ID;
+        $this->save($workflow, $path, false);
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importRole(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $role = $this->child(FlowRole::class, $workflow, $code);
+        $role->Title = $this->string($definition, 'title', $path);
+        $role->IsExternal = (bool) ($definition['external'] ?? false);
+        $role->Sort = $index + 1;
+        $role->GroupID = 0;
+        if (isset($definition['group'])) {
+            $role->GroupID = $this->group((string) $definition['group'], $role->Title)->ID;
+        }
+        $this->save($role, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importPhase(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $phase = $this->child(Phase::class, $workflow, $code);
+        $phase->Title = $this->string($definition, 'title', $path);
+        $phase->Sort = $index + 1;
+        $this->save($phase, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importStatus(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $status = $this->child(Status::class, $workflow, $code);
+        $status->Title = $this->string($definition, 'title', $path);
+        $status->IsFinal = (bool) ($definition['final'] ?? false);
+        $status->Sort = $index + 1;
+        $phaseCode = $this->string($definition, 'phase', $path);
+        $phase = Phase::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $phaseCode])->first();
+        if (!$phase) {
+            throw new ConfigException("{$path} ({$code}): unknown phase \"{$phaseCode}\".");
+        }
+        $status->PhaseID = $phase->ID;
+        $this->save($status, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importTransition(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $from = $this->status($workflow, $this->string($definition, 'from', $path), $path);
+        $to = $this->status($workflow, $this->string($definition, 'to', $path), $path);
+        $path .= " ({$from->Code} → {$to->Code})";
+
+        $transition = Transition::get()->filter(['FromID' => $from->ID, 'ToID' => $to->ID])->first()
+            ?? Transition::create(['WorkflowID' => $workflow->ID, 'FromID' => $from->ID, 'ToID' => $to->ID]);
+        $transition->Title = (string) ($definition['title'] ?? '');
+        $transition->Sort = $index + 1;
+        $this->save($transition, $path);
+
+        $roleIDs = [];
+        foreach ($this->list($definition, 'roles', $path) as $roleCode) {
+            $role = FlowRole::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => (string) $roleCode])->first();
+            if (!$role) {
+                throw new ConfigException("{$path}: unknown role \"{$roleCode}\".");
+            }
+            $roleIDs[] = $role->ID;
+        }
+        $transition->Roles()->setByIDList($roleIDs);
+    }
+
+    /**
+     * Find a record of the workflow by code, or a new one.
+     *
+     * @template T of DataObject
+     * @param class-string<T> $class
+     * @return T
+     */
+    private function child(string $class, Workflow $workflow, string $code): DataObject
+    {
+        return $class::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $code])->first()
+            ?? $class::create(['WorkflowID' => $workflow->ID, 'Code' => $code]);
+    }
+
+    private function status(Workflow $workflow, string $code, string $path): Status
+    {
+        $status = Status::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $code])->first();
+        if (!$status) {
+            throw new ConfigException("{$path}: unknown status \"{$code}\".");
+        }
+        return $status;
+    }
+
+    private function group(string $code, string $title): Group
+    {
+        $group = Group::get()->find('Code', $code);
+        if (!$group) {
+            $group = Group::create(['Title' => $title, 'Code' => $code]);
+            $group->write();
+            $this->count(Group::class, true);
+        }
+        return $group;
+    }
+
+    private function save(DataObject $record, string $path, bool $count = true): void
+    {
+        $isNew = !$record->isInDB();
+        $changed = $isNew || $record->isChanged(null, DataObject::CHANGE_VALUE);
+        try {
+            $record->write();
+        } catch (ValidationException $e) {
+            throw new ConfigException("{$path}: " . $e->getMessage(), 0, $e);
+        }
+        if ($count && $changed) {
+            $this->count($record::class, $isNew);
+        }
+    }
+
+    private function count(string $class, bool $created): void
+    {
+        $type = substr(strrchr($class, '\\') ?: $class, 1) ?: $class;
+        $this->stats[$type] ??= ['created' => 0, 'updated' => 0];
+        $this->stats[$type][$created ? 'created' : 'updated']++;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function string(array $data, string $key, string $path): string
+    {
+        $value = $data[$key] ?? null;
+        if (!is_scalar($value) || (string) $value === '') {
+            throw new ConfigException("{$path}: \"{$key}\" is missing.");
+        }
+        return (string) $value;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<int, mixed>
+     */
+    private function list(array $data, string $key, string $path): array
+    {
+        $value = $data[$key] ?? [];
+        if (!is_array($value) || !array_is_list($value)) {
+            throw new ConfigException("{$path}: \"{$key}\" must be a list.");
+        }
+        return $value;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function map(mixed $value, string $path): array
+    {
+        if (!is_array($value) || array_is_list($value)) {
+            throw new ConfigException("{$path}: expected a mapping.");
+        }
+        return $value;
+    }
+}
