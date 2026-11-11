@@ -97,6 +97,12 @@ workflows:
         title: Bestätigung
         document_title: 'Bestätigung {{Title}}'
         body: '<p>Der Kurs {{Title}} in {{Venue}} hat den Status {{Status}}.</p>'
+    follow_ups:
+      - code: chase_speaker
+        title: 'Referent:in nachfassen'
+        status: with_speaker
+        days: 7
+        responsibility: lead
     permissions:
       - group: basics
         role: organisers

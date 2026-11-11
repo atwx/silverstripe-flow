@@ -10,6 +10,7 @@ use Atwx\Flow\Model\Assignment;
 use Atwx\Flow\Model\AssignmentChange;
 use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CustomField;
+use Atwx\Flow\Model\FollowUp;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
@@ -45,6 +46,7 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<Assignment> FlowAssignments()
  * @method HasManyList<AssignmentChange> FlowAssignmentChanges()
  * @method HasManyList<CaseDocument> FlowDocuments()
+ * @method HasManyList<FollowUp> FlowFollowUps()
  * @extends Extension<DataObject&static>
  */
 class CaseFileExtension extends Extension
@@ -64,6 +66,7 @@ class CaseFileExtension extends Extension
         'FlowAssignments' => Assignment::class . '.Case',
         'FlowAssignmentChanges' => AssignmentChange::class . '.Case',
         'FlowDocuments' => CaseDocument::class . '.Case',
+        'FlowFollowUps' => FollowUp::class . '.Case',
     ];
 
     /**
@@ -76,6 +79,7 @@ class CaseFileExtension extends Extension
         'FlowAssignments',
         'FlowAssignmentChanges',
         'FlowDocuments',
+        'FlowFollowUps',
     ];
 
     /**

@@ -245,7 +245,11 @@ class AccessLinkTest extends FunctionalTest
         $timeline = $controller->timeline($course);
         $this->assertNotNull($timeline);
         $kinds = array_count_values($timeline->column('Kind'));
-        $this->assertSame(['status' => 1, 'link' => 2], $kinds, 'created; link created and revoked');
+        $this->assertSame(
+            ['status' => 1, 'followup' => 1, 'link' => 2],
+            $kinds,
+            'created (in "with_speaker", with its follow-up rule); link created and revoked'
+        );
     }
 
     public function testDeletingCaseRemovesLinks(): void

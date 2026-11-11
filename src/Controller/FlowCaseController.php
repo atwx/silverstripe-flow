@@ -13,6 +13,7 @@ use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
+use Atwx\Flow\Model\FollowUp;
 use Atwx\Flow\Model\LinkAccess;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Phase;
@@ -352,16 +353,23 @@ abstract class FlowCaseController extends FrontdeskController
     private static array $sub_controllers = [
         AccessLinkSubController::class,
         CaseDocumentSubController::class,
+        FollowUpSubController::class,
     ];
 
     private static array $allowed_actions = [
         'links',
         'documents',
+        'followups',
     ];
 
     public function links(HTTPRequest $request): AccessLinkSubController
     {
         return AccessLinkSubController::create()->setParentContext($this, (int) $request->param('ID'));
+    }
+
+    public function followups(HTTPRequest $request): FollowUpSubController
+    {
+        return FollowUpSubController::create()->setParentContext($this, (int) $request->param('ID'));
     }
 
     public function documents(HTTPRequest $request): CaseDocumentSubController
@@ -441,6 +449,9 @@ abstract class FlowCaseController extends FrontdeskController
         foreach ($data as $item) {
             if ($item->Segment === $segment) {
                 $item->Title = _t(AccessLinkSubController::class . '.TITLE', 'Edit links');
+            }
+            if ($item->Segment === FollowUpSubController::config()->get('url_segment')) {
+                $item->Title = _t(FollowUpSubController::class . '.TITLE', 'Follow-ups');
             }
             if ($item->Segment === CaseDocumentSubController::config()->get('url_segment')) {
                 $item->Title = _t(CaseDocumentSubController::class . '.TITLE', 'Documents');
@@ -594,6 +605,29 @@ abstract class FlowCaseController extends FrontdeskController
         $case = ['CaseClass' => $record->ClassName, 'CaseID' => $record->ID];
         foreach (StatusChange::get()->filter($case) as $change) {
             $entries->push($this->statusChangeEntry($change));
+        }
+        foreach (FollowUp::get()->filter($case) as $followUp) {
+            $creator = $followUp->CreatedBy();
+            $entries->push(TimelineEntry::create(
+                (string) $followUp->Created,
+                _t(self::class . '.TIMELINE_FOLLOWUP', 'Follow-up on {date}: {text}', [
+                    'date' => $followUp->DueDate ? date('d.m.Y', (int) strtotime((string) $followUp->DueDate)) : '–',
+                    'text' => $followUp->Text,
+                ]),
+                '',
+                $creator->exists() ? (string) $creator->getName() : '',
+                'followup'
+            ));
+            if ($followUp->IsDone && $followUp->DoneAt) {
+                $doneBy = $followUp->DoneBy();
+                $entries->push(TimelineEntry::create(
+                    (string) $followUp->DoneAt,
+                    _t(self::class . '.TIMELINE_FOLLOWUP_DONE', 'Follow-up done: {text}', ['text' => $followUp->Text]),
+                    '',
+                    $doneBy->exists() ? (string) $doneBy->getName() : '',
+                    'followup'
+                ));
+            }
         }
         foreach (CaseDocument::get()->filter($case) as $document) {
             $member = $document->Member();

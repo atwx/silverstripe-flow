@@ -5,6 +5,7 @@ namespace Atwx\Flow\Config;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
+use Atwx\Flow\Model\FollowUpRule;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Phase;
@@ -96,6 +97,7 @@ class ConfigImporter
             'field_groups' => $this->importFieldGroup(...),
             'custom_fields' => $this->importCustomField(...),
             'documents' => $this->importDocumentTemplate(...),
+            'follow_ups' => $this->importFollowUpRule(...),
             'permissions' => $this->importPermission(...),
         ];
         foreach ($sections as $key => $importer) {
@@ -258,6 +260,33 @@ class ConfigImporter
         $template->Body = $this->string($definition, 'body', $path);
         $template->Sort = $index + 1;
         $this->save($template, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importFollowUpRule(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $rule = $this->child(FollowUpRule::class, $workflow, $code);
+        $rule->Title = $this->string($definition, 'title', $path);
+        $rule->StatusID = $this->status($workflow, $this->string($definition, 'status', $path), $path)->ID;
+        $rule->Days = (int) ($definition['days'] ?? 0);
+        $rule->CloseOnLeave = (bool) ($definition['close_on_leave'] ?? true);
+        $rule->ResponsibilityID = 0;
+        if (isset($definition['responsibility'])) {
+            $responsibility = Responsibility::get()->filter([
+                'WorkflowID' => $workflow->ID,
+                'Code' => (string) $definition['responsibility'],
+            ])->first();
+            if (!$responsibility) {
+                $unknown = (string) $definition['responsibility'];
+                throw new ConfigException("{$path} ({$code}): unknown responsibility \"{$unknown}\".");
+            }
+            $rule->ResponsibilityID = $responsibility->ID;
+        }
+        $rule->Sort = $index + 1;
+        $this->save($rule, "{$path} ({$code})");
     }
 
     /**

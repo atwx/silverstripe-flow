@@ -14,6 +14,7 @@ de:
     WORKFLOW_REQUIRED: 'Der Eintrag muss zu einem Ablauf gehören.'
     FOREIGN_RECORD: 'Bitte einen Eintrag aus demselben Ablauf wählen.'
   Atwx\Flow\Model\Workflow:
+    has_many_FollowUpRules: 'Wiedervorlage-Regeln'
     has_many_DocumentTemplates: 'Vorlagen'
     has_many_Responsibilities: 'Zuständigkeiten'
     SINGULARNAME: 'Ablauf'
@@ -130,6 +131,8 @@ de:
     REQUIRED: 'Bitte eine Auswahl treffen.'
     DUPLICATE: 'Für diese Feldgruppe, Rolle und diesen Status gibt es bereits einen Eintrag.'
   Atwx\Flow\Controller\FlowCaseController:
+    TIMELINE_FOLLOWUP: 'Wiedervorlage zum {date}: {text}'
+    TIMELINE_FOLLOWUP_DONE: 'Wiedervorlage erledigt: {text}'
     DOCUMENT: 'Schreiben erstellen'
     DOCUMENT_CREATE: 'Erstellen'
     DOCUMENT_UNKNOWN: 'Unbekannte Vorlage.'
@@ -257,3 +260,33 @@ de:
   Atwx\Flow\Document\Placeholders:
     YES: 'Ja'
     NO: 'Nein'
+  Atwx\Flow\Model\FollowUpRule:
+    SINGULARNAME: 'Wiedervorlage-Regel'
+    PLURALNAME: 'Wiedervorlage-Regeln'
+    db_Code: 'Code'
+    db_Title: 'Text der Wiedervorlage'
+    db_Days: 'Fällig nach Tagen'
+    db_CloseOnLeave: 'Beim Verlassen des Status schließen'
+    db_Sort: 'Reihenfolge'
+    has_one_Status: 'Bei Status'
+    has_one_Responsibility: 'Für Zuständigkeit'
+    STATUS_REQUIRED: 'Bitte einen Status dieses Ablaufs wählen.'
+    DAYS_NEGATIVE: 'Die Anzahl der Tage darf nicht negativ sein.'
+  Atwx\Flow\Model\FollowUp:
+    SINGULARNAME: 'Wiedervorlage'
+    PLURALNAME: 'Wiedervorlagen'
+    db_DueDate: 'Fällig'
+    db_Text: 'Text'
+    db_IsDone: 'Erledigt'
+    has_one_Member: 'Für'
+  Atwx\Flow\Controller\FollowUpSubController:
+    TITLE: 'Wiedervorlagen'
+  Atwx\Flow\Controller\FollowUpColumns:
+    YES: 'ja'
+  Atwx\Flow\Controller\FollowUpController:
+    CASE: 'Akte'
+    VIEW_MINE_DUE: 'Meine fälligen'
+    VIEW_MINE: 'Meine'
+    VIEW_OVERDUE: 'Überfällig'
+    DONE: 'Als erledigt markieren'
+    DONE_COUNT: '{count} Wiedervorlagen erledigt.'

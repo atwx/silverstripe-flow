@@ -5,6 +5,7 @@ namespace Atwx\Flow\Config;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
+use Atwx\Flow\Model\FollowUpRule;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Phase;
@@ -168,6 +169,28 @@ class ConfigExporter
         }
         if ($documents) {
             $data['documents'] = $documents;
+        }
+
+        // Only written when there are rules, so older files stay unchanged.
+        $followUps = [];
+        foreach (FollowUpRule::get()->filter('WorkflowID', $workflow->ID) as $rule) {
+            $entry = [
+                'code' => $rule->Code,
+                'title' => $rule->Title,
+                'status' => $rule->Status()->exists() ? $rule->Status()->Code : '',
+                'days' => (int) $rule->Days,
+            ];
+            $responsibility = $rule->Responsibility();
+            if ($responsibility->exists()) {
+                $entry['responsibility'] = $responsibility->Code;
+            }
+            if (!$rule->CloseOnLeave) {
+                $entry['close_on_leave'] = false;
+            }
+            $followUps[] = $entry;
+        }
+        if ($followUps) {
+            $data['follow_ups'] = $followUps;
         }
 
         $roleSort = array_flip(FlowRole::get()->filter('WorkflowID', $workflow->ID)->column('ID'));
