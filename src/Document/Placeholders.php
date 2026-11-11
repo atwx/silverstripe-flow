@@ -22,6 +22,9 @@ use SilverStripe\Security\Member;
  * - {{Flow.<code>}}: custom field (option label for selects)
  * - {{Assignee.<code>}}: name of the member responsible
  * - {{Status}}, {{Today}}, {{Me.Name}} / {{Me.Email}} (the member creating it)
+ * - {{#Relation}} … {{/Relation}}: repeated for every record of a has_many or
+ *   many_many relation of the case file; placeholders inside refer to that
+ *   record (e.g. {{#Applications}}{{School.Name}}{{/Applications}})
  *
  * Unknown placeholders become empty. Values are HTML-escaped unless $html is false.
  */
@@ -30,6 +33,34 @@ class Placeholders
     use Injectable;
 
     public function replace(string $text, DataObject $case, ?Member $me, bool $html = true): string
+    {
+        $text = (string) preg_replace_callback(
+            '/\{\{#([A-Za-z0-9_]+)\}\}(.*?)\{\{\/\1\}\}/s',
+            fn (array $match) => $this->repeat($match[1], $match[2], $case, $me, $html),
+            $text
+        );
+        return $this->fill($text, $case, $me, $html);
+    }
+
+    /**
+     * The block once per record of a to-many relation of the case file.
+     */
+    private function repeat(string $relation, string $block, DataObject $case, ?Member $me, bool $html): string
+    {
+        $schema = DataObject::getSchema();
+        $isToMany = $schema->hasManyComponent($case::class, $relation)
+            || $schema->manyManyComponent($case::class, $relation);
+        if (!$isToMany) {
+            return '';
+        }
+        $result = '';
+        foreach ($case->$relation() as $item) {
+            $result .= $this->fill($block, $item, $me, $html);
+        }
+        return $result;
+    }
+
+    private function fill(string $text, DataObject $case, ?Member $me, bool $html): string
     {
         return (string) preg_replace_callback(
             '/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/',

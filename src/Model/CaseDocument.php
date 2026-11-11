@@ -5,6 +5,7 @@ namespace Atwx\Flow\Model;
 use SilverStripe\Assets\Storage\DBFile;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Member;
+use SilverStripe\Security\Security;
 
 /**
  * A document of a case file, created from a template (PDF). The file is kept
@@ -56,8 +57,16 @@ class CaseDocument extends DataObject
         return $labels;
     }
 
+    /**
+     * Visible to members who may view the case file, never without login: the
+     * asset store publishes files of records anonymous visitors may view.
+     */
     public function canView($member = null): bool
     {
+        $member = $member ?? Security::getCurrentUser();
+        if (!$member) {
+            return false;
+        }
         $case = $this->Case();
         return $case->exists() && $case->canView($member);
     }

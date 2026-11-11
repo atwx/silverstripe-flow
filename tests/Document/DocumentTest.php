@@ -10,14 +10,17 @@ use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
+use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Service\DocumentService;
 use Atwx\Flow\Tests\Stubs\FakePdfRenderer;
+use Atwx\Flow\Tests\Stubs\OpenRecord;
 use Atwx\Flow\Tests\Stubs\TestApplication;
 use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse_Exception;
+use SilverStripe\Assets\Dev\TestAssetStore;
 use SilverStripe\Control\Session;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\SapphireTest;
@@ -37,6 +40,7 @@ class DocumentTest extends SapphireTest
     protected static $extra_dataobjects = [
         TestCourse::class,
         TestApplication::class,
+        OpenRecord::class,
     ];
 
     private FakePdfRenderer $renderer;
@@ -46,8 +50,28 @@ class DocumentTest extends SapphireTest
         parent::setUp();
         i18n::set_locale('de_DE');
         ConfigImporter::create()->importFile(__DIR__ . '/../Config/config.yml');
+        TestAssetStore::activate('flow-documents');
         $this->renderer = new FakePdfRenderer();
         Injector::inst()->registerService($this->renderer, PdfRenderer::class);
+    }
+
+    protected function tearDown(): void
+    {
+        TestAssetStore::reset();
+        parent::tearDown();
+    }
+
+    public function testDocumentOfAnOpenRecordStaysProtected(): void
+    {
+        $this->logOut();
+        $record = OpenRecord::create(['Title' => 'offen']);
+        $record->write();
+        $document = CaseDocument::create(['CaseClass' => $record->ClassName, 'CaseID' => $record->ID]);
+        $document->File->setFromString('%PDF', 'flow-documents/offen.pdf', null, null, ['visibility' => 'protected']);
+        $document->write();
+
+        $this->assertFalse($document->canView(null), 'never without login');
+        $this->assertSame('protected', $document->File->getVisibility());
     }
 
     private function course(string $title = 'Paläographie <I>'): TestCourse
@@ -98,6 +122,22 @@ class DocumentTest extends SapphireTest
         $course = $this->course();
         $this->assertSame('', Placeholders::singleton()->replace('{{delete}}{{write}}', $course, null));
         $this->assertNotNull(TestCourse::get()->byID($course->ID), 'record still exists');
+    }
+
+    public function testRepeatBlocksLoopOverToManyRelations(): void
+    {
+        $course = $this->course('Kurs R');
+        foreach (['eins', 'zwei'] as $text) {
+            Note::create(['CaseClass' => $course->ClassName, 'CaseID' => $course->ID, 'Text' => $text])->write();
+        }
+        $text = Placeholders::singleton()->replace(
+            '<ul>{{#FlowNotes}}<li>{{Text}} ({{Case.Title}})</li>{{/FlowNotes}}</ul>{{#Nope}}x{{/Nope}}',
+            $course,
+            null
+        );
+        $this->assertStringContainsString('<li>eins (Kurs R)</li>', $text);
+        $this->assertStringContainsString('<li>zwei (Kurs R)</li>', $text);
+        $this->assertStringEndsWith('</ul>', $text, 'unknown relation: block left out');
     }
 
     public function testCustomFieldShowsOptionLabel(): void

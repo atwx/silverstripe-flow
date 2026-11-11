@@ -21,7 +21,7 @@ class CaseDocumentSubController extends FrontdeskSubController
 
     private static string $url_segment = 'documents';
 
-    private static string $title = 'Documents';
+    private static string $title = 'Schreiben';
 
     private static array $allowed_actions = [
         'download',
@@ -52,8 +52,10 @@ class CaseDocumentSubController extends FrontdeskSubController
 
     protected function defineColumns(): ColumnCollection
     {
-        return ColumnCollection::fromSummaryFields(CaseDocument::class)
-            ->make('Title', _t(CaseDocument::class . '.db_Title', 'Title'))->link('download/{ID}')->end();
+        return ColumnCollection::create()
+            ->make('Title', _t(CaseDocument::class . '.db_Title', 'Title'))->link('download/{ID}')->end()
+            ->make('Created.Nice', _t(CaseDocument::class . '.CREATED', 'Created'))->end()
+            ->make('Member.Name', _t(CaseDocument::class . '.has_one_Member', 'By'))->end();
     }
 
     protected function defineRowActions(DataObject $record): array
