@@ -23,6 +23,7 @@ workflows:
         to: approved
         roles: [clerk]
     field_groups: []
+    custom_fields: []
     permissions: []
   - code: course
     title: Kurs
@@ -76,6 +77,17 @@ workflows:
         title: Ausschreibung
       - code: organisation
         title: Organisation
+    custom_fields:
+      - code: audience
+        title: Zielgruppe
+        type: select
+        group: announcement
+        options: { beginners: Einsteiger, advanced: Fortgeschrittene }
+        list: true
+      - code: certificate
+        title: Zertifikat
+        type: checkbox
+        group: announcement
     permissions:
       - group: basics
         role: organisers

@@ -24,10 +24,10 @@ class FlowFieldLayout
             return null;
         }
         $layout = FieldLayout::create()->setDefaultLevel(FieldLayout::HIDDEN);
-        $declared = FieldGroup::declaredFor($record->ClassName);
+        $fields = FieldGroup::fieldsFor($workflow);
         foreach (FieldGroup::get()->filter('WorkflowID', $workflow->ID) as $group) {
-            if (isset($declared[$group->Code])) {
-                $layout->group((string) $group->Title, $declared[$group->Code]['fields']);
+            if (isset($fields[$group->Code])) {
+                $layout->group((string) $group->Title, $fields[$group->Code]);
             }
         }
         if ($actor) {

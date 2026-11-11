@@ -8,6 +8,7 @@ SilverStripe\Cli\Sake:
   commands:
     'flow:import-config': Atwx\Flow\Cli\ImportConfigCommand
     'flow:export-config': Atwx\Flow\Cli\ExportConfigCommand
+    'flow:cleanup-data': Atwx\Flow\Cli\CleanupDataCommand
 
 ---
 Name: silverstripe-flow-routes

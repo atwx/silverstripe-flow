@@ -6,6 +6,7 @@ use Atwx\Flow\Actor\AccessLinkActor;
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
 use Atwx\Flow\Model\AccessLink;
+use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
@@ -33,6 +34,7 @@ use SilverStripe\ORM\HasManyList;
  * initial status.
  *
  * @property int $FlowStatusID
+ * @property string $FlowData JSON object of custom field values, keyed by code
  * @method Status FlowStatus()
  * @method HasManyList<StatusChange> FlowStatusChanges()
  * @method HasManyList<Note> FlowNotes()
@@ -41,6 +43,10 @@ use SilverStripe\ORM\HasManyList;
  */
 class CaseFileExtension extends Extension
 {
+    private static array $db = [
+        'FlowData' => 'Text',
+    ];
+
     private static array $has_one = [
         'FlowStatus' => Status::class,
     ];
@@ -90,6 +96,71 @@ class CaseFileExtension extends Extension
             $case->write();
         } finally {
             unset(self::$authorisedWrites[$key]);
+        }
+    }
+
+    /**
+     * Custom field values, keyed by code.
+     *
+     * @return array<string, mixed>
+     */
+    public function flowData(): array
+    {
+        $data = json_decode((string) $this->getOwner()->getField('FlowData'), true);
+        return is_array($data) ? $data : [];
+    }
+
+    public function flowValue(string $code): mixed
+    {
+        return $this->flowData()[$code] ?? null;
+    }
+
+    /**
+     * Set a custom field value (stored on the next write).
+     */
+    public function setFlowValue(string $code, mixed $value): void
+    {
+        $data = $this->flowData();
+        if ($value === null) {
+            unset($data[$code]);
+        } else {
+            $data[$code] = $value;
+        }
+        $this->getOwner()->setField(
+            'FlowData',
+            $data === [] ? null : json_encode($data, JSON_UNESCAPED_UNICODE)
+        );
+    }
+
+    /**
+     * Custom fields of the workflow of this case file.
+     *
+     * @return array<int, CustomField>
+     */
+    public function flowCustomFields(): array
+    {
+        $workflow = $this->flowWorkflow();
+        return $workflow ? CustomField::get()->filter('WorkflowID', $workflow->ID)->toArray() : [];
+    }
+
+    /**
+     * Take submitted custom field values ("Flow_<code>", e.g. from a form) into
+     * FlowData. Values reset to null (fields that are not writable) are left alone.
+     */
+    private function collectFlowValues(): void
+    {
+        $owner = $this->getOwner();
+        foreach ($this->flowCustomFields() as $custom) {
+            $name = $custom->formFieldName();
+            $changed = $owner->getChangedFields(false, DataObject::CHANGE_VALUE);
+            if (!array_key_exists($name, $changed)) {
+                continue;
+            }
+            $value = $owner->getField($name);
+            if ($value === null) {
+                continue;
+            }
+            $this->setFlowValue((string) $custom->Code, $custom->normalise($value));
         }
     }
 
@@ -171,6 +242,7 @@ class CaseFileExtension extends Extension
     {
         $owner = $this->getOwner();
         $this->wasNew = !$owner->isInDB();
+        $this->collectFlowValues();
 
         $authorised = isset(self::$authorisedWrites[spl_object_hash($owner)]);
 
@@ -221,6 +293,8 @@ class CaseFileExtension extends Extension
 
     protected function updateCMSFields(FieldList $fields): void
     {
-        $fields->removeByName(['FlowStatusID', 'FlowStatus', 'FlowStatusChanges', 'FlowNotes', 'FlowAccessLinks']);
+        $fields->removeByName([
+            'FlowStatusID', 'FlowStatus', 'FlowStatusChanges', 'FlowNotes', 'FlowAccessLinks', 'FlowData',
+        ]);
     }
 }

@@ -22,6 +22,7 @@ use SilverStripe\ORM\DataObject;
  * - Without an entry, a group is hidden.
  * - An actor with several roles gets the highest level of them.
  * - Fields that belong to no declared group are hidden.
+ * - Custom fields ("Flow_<code>") have the level of their group.
  */
 class FieldAccess
 {
@@ -85,11 +86,15 @@ class FieldAccess
      */
     public function fieldLevels(DataObject $case, FlowActor $actor): array
     {
+        $workflow = $this->workflowOf($case);
+        if (!$workflow) {
+            return [];
+        }
         $groupLevels = $this->groupLevels($case, $actor);
         $result = [];
-        foreach (FieldGroup::declaredFor($case->ClassName) as $code => $definition) {
+        foreach (FieldGroup::fieldsFor($workflow) as $code => $fields) {
             $level = $groupLevels[$code] ?? FieldPermission::HIDDEN;
-            foreach ($definition['fields'] as $field) {
+            foreach ($fields as $field) {
                 // A field listed in several groups gets the highest level.
                 if (!isset($result[$field]) || FieldPermission::rank($level) > FieldPermission::rank($result[$field])) {
                     $result[$field] = $level;

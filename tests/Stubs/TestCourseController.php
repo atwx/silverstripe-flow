@@ -44,4 +44,14 @@ class TestCourseController extends FlowCaseController implements TestOnly
     {
         return $this->defineColumns();
     }
+
+    /**
+     * IDs of the list after applying the filters of the current request.
+     *
+     * @return array<int, int>
+     */
+    public function filteredIDs(): array
+    {
+        return array_map('intval', $this->getQuery()->sort('ID')->column('ID'));
+    }
 }

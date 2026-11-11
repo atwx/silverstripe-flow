@@ -50,7 +50,7 @@ class FlowAdminPagesTest extends FunctionalTest
     {
         $workflow = Workflow::get()->find('Code', 'course');
         $this->assertNotNull($workflow);
-        $relations = ['Phases', 'Statuses', 'Transitions', 'Roles', 'FieldGroups', 'FieldPermissions'];
+        $relations = ['Phases', 'Statuses', 'Transitions', 'Roles', 'FieldGroups', 'FieldPermissions', 'CustomFields'];
         foreach ($relations as $relation) {
             $record = $workflow->$relation()->first();
             $this->assertNotNull($record, $relation);

@@ -89,6 +89,38 @@ class EventController extends FlowCaseController
 
 Extensions can add entries to the timeline with `updateFlowTimeline(ArrayList $entries, DataObject $record)`.
 
+## Custom fields
+
+Customers add fields without a deployment: in the CMS (workflow → *Custom fields*)
+with a code (fixed once created), title, type (text, multi-line text, date, yes/no,
+choice), field group and options. Values are stored as JSON on the case file
+(`FlowData`, keyed by code); in forms the fields are named `Flow_<code>`.
+
+A custom field has the permissions of its field group and appears in the form, the
+record view and the edit link page. Fields marked *Column in list* are list
+columns and exported; choice and yes/no fields can be filtered (`JSON_VALUE`).
+
+```php
+$event->flowValue('audience');            // stored value
+$event->setFlowValue('audience', 'all');  // written on the next write()
+```
+
+Values of deleted fields stay in the JSON until `sake flow:cleanup-data`
+(`--dry-run` to report only) removes them. When logic depends on a value, it
+should become a real field.
+
+In the configuration file:
+
+```yaml
+    custom_fields:
+      - code: audience
+        title: Zielgruppe
+        type: select              # text, textarea, date, checkbox, select
+        group: announcement
+        options: { beginners: Einsteiger, advanced: Fortgeschrittene }
+        list: true                # column in the list and the export
+```
+
 ## Edit links
 
 People without an account work on a case file through an edit link. Members who

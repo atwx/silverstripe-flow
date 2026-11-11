@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Config;
 
+use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
@@ -119,6 +120,24 @@ class ConfigExporter
         foreach (FieldGroup::get()->filter('WorkflowID', $workflow->ID) as $group) {
             $data['field_groups'][] = ['code' => $group->Code, 'title' => $group->Title];
             $groupSort[$group->ID] = count($groupSort);
+        }
+
+        $data['custom_fields'] = [];
+        foreach (CustomField::get()->filter('WorkflowID', $workflow->ID) as $custom) {
+            $group = $custom->FieldGroup();
+            $entry = [
+                'code' => $custom->Code,
+                'title' => $custom->Title,
+                'type' => $custom->Type,
+                'group' => $group->exists() ? $group->Code : '',
+            ];
+            if ($custom->optionMap() !== []) {
+                $entry['options'] = $custom->optionMap();
+            }
+            if ($custom->ShowInList) {
+                $entry['list'] = true;
+            }
+            $data['custom_fields'][] = $entry;
         }
 
         $roleSort = array_flip(FlowRole::get()->filter('WorkflowID', $workflow->ID)->column('ID'));

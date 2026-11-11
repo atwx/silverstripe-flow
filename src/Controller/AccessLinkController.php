@@ -5,11 +5,13 @@ namespace Atwx\Flow\Controller;
 use Atwx\Flow\Actor\AccessLinkActor;
 use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\LinkAccess;
+use Atwx\Flow\Ui\CustomFieldUi;
 use Atwx\Flow\Ui\FlowFieldLayout;
 use Atwx\Flow\Ui\FlowRecordActions;
 use Atwx\SilverstripeFrontdeskKit\Controller\StandaloneRecordController;
 use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Forms\FieldList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDatetime;
 
@@ -59,6 +61,16 @@ class AccessLinkController extends StandaloneRecordController
             ?? FieldLayout::create()->setDefaultLevel(FieldLayout::HIDDEN);
     }
 
+    protected function formFields(FieldList $fields, DataObject $record): FieldList
+    {
+        return CustomFieldUi::addFormFields($fields, $record);
+    }
+
+    protected function viewRows(DataObject $record): array
+    {
+        return array_merge(parent::viewRows($record), CustomFieldUi::viewRows($record));
+    }
+
     protected function defineRecordActions(DataObject $record): array
     {
         return FlowRecordActions::forActor($record, $this->actor());
@@ -94,6 +106,9 @@ class AccessLinkController extends StandaloneRecordController
     protected function afterSave(DataObject $record, array $changed): void
     {
         $labels = $record->fieldLabels(false);
+        foreach (CustomFieldUi::fieldsForClass($record->ClassName) as $custom) {
+            $labels[$custom->formFieldName()] = (string) $custom->Title;
+        }
         LinkAccess::create([
             'LinkID' => $this->actor()->getLink()->ID,
             'Kind' => LinkAccess::SAVE,

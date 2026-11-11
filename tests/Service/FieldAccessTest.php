@@ -146,13 +146,18 @@ class FieldAccessTest extends SapphireTest
                 'Venue' => 'read',
                 'Description' => 'write',
                 'Audience' => 'write',
+                'Flow_audience' => 'write',
+                'Flow_certificate' => 'write',
                 'InternalNote' => 'hidden',
             ],
             $this->access->fieldLevels($course, $speaker)
         );
-        $this->assertSame(['Description', 'Audience'], $this->access->writableFields($course, $speaker));
         $this->assertSame(
-            ['Title', 'Venue', 'Description', 'Audience'],
+            ['Description', 'Audience', 'Flow_audience', 'Flow_certificate'],
+            $this->access->writableFields($course, $speaker)
+        );
+        $this->assertSame(
+            ['Title', 'Venue', 'Description', 'Audience', 'Flow_audience', 'Flow_certificate'],
             $this->access->readableFields($course, $speaker)
         );
         $this->assertTrue($this->access->canWrite($course, $speaker, 'Description'));

@@ -4,7 +4,9 @@ namespace Atwx\Flow\Controller;
 
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
+use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\AccessLink;
+use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\LinkAccess;
@@ -14,6 +16,7 @@ use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Service\FieldAccess;
+use Atwx\Flow\Ui\CustomFieldUi;
 use Atwx\Flow\Ui\FlowFieldLayout;
 use Atwx\Flow\Ui\FlowRecordActions;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController;
@@ -25,6 +28,7 @@ use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\RecordAction;
 use Atwx\SilverstripeFrontdeskKit\Table\TimelineEntry;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Forms\FieldList;
 use SilverStripe\Model\ArrayData;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
@@ -85,9 +89,29 @@ abstract class FlowCaseController extends FrontdeskController
     protected function defineColumns(): ColumnCollection
     {
         $columns = parent::defineColumns();
+        $this->addCustomFieldColumns($columns);
         $this->addStatusColumns($columns);
         $this->protectColumns($columns);
         return $columns;
+    }
+
+    /**
+     * Columns of the custom fields marked "Column in list" (also exported).
+     */
+    protected function addCustomFieldColumns(ColumnCollection $columns): void
+    {
+        foreach (CustomFieldUi::fieldsForClass($this->getManagedModel()) as $custom) {
+            if (!$custom->ShowInList) {
+                continue;
+            }
+            $code = (string) $custom->Code;
+            $columns->make($custom->formFieldName(), (string) $custom->Title)
+                ->format(function ($value, DataObject $record) use ($custom, $code) {
+                    /** @var DataObject&CaseFileExtension $record */
+                    return $custom->display($record->flowValue($code));
+                })
+                ->end();
+        }
     }
 
     protected function addStatusColumns(ColumnCollection $columns): void
@@ -104,9 +128,10 @@ abstract class FlowCaseController extends FrontdeskController
     protected function protectColumns(ColumnCollection $columns): void
     {
         $model = DataObject::singleton($this->getManagedModel());
+        $workflow = $this->flowWorkflow();
         $fields = [];
-        foreach (FieldGroup::declaredFor($model::class) as $group) {
-            $fields = array_merge($fields, $group['fields']);
+        foreach ($workflow ? FieldGroup::fieldsFor($workflow) : [] as $groupFields) {
+            $fields = array_merge($fields, $groupFields);
         }
         foreach ($columns as $column) {
             /** @var Column $column */
@@ -151,7 +176,7 @@ abstract class FlowCaseController extends FrontdeskController
             return $filters;
         }
         $workflowID = $workflow->ID;
-        return $filters
+        $filters
             ->add(
                 SelectFilter::create('FlowPhase', _t(self::class . '.PHASE', 'Phase'))
                     ->options(fn () => Phase::get()->filter('WorkflowID', $workflowID)->map('ID', 'Title')->toArray())
@@ -162,6 +187,81 @@ abstract class FlowCaseController extends FrontdeskController
                     ->options(fn () => Status::get()->filter('WorkflowID', $workflowID)->map('ID', 'Title')->toArray())
                     ->apply(fn ($list, $value) => $list->filter('FlowStatusID', (int) $value))
             );
+        foreach (CustomFieldUi::fieldsForClass($this->getManagedModel()) as $custom) {
+            $filter = $this->customFieldFilter($custom);
+            if ($filter) {
+                $filters->add($filter);
+            }
+        }
+        return $filters;
+    }
+
+    /**
+     * Filter for a custom field of type choice or yes/no (on the JSON value).
+     * Only offered to members who may read the field in some status.
+     */
+    protected function customFieldFilter(CustomField $custom): ?SelectFilter
+    {
+        if (!in_array($custom->Type, ['select', 'checkbox'], true) || !$this->mayEverRead($custom->formFieldName())) {
+            return null;
+        }
+        $options = $custom->Type === 'select'
+            ? $custom->optionMap()
+            : ['1' => _t(CustomField::class . '.YES', 'Yes'), '0' => _t(CustomField::class . '.NO', 'No')];
+        $class = $this->getManagedModel();
+        $table = DataObject::getSchema()->tableForField($class, 'FlowData');
+        $path = '$.' . $custom->Code;
+        $isCheckbox = $custom->Type === 'checkbox';
+        return SelectFilter::create($custom->formFieldName(), (string) $custom->Title)
+            ->options($options)
+            ->apply(function ($list, $value) use ($table, $path, $isCheckbox) {
+                $column = sprintf('JSON_VALUE("%s"."FlowData", ?)', $table);
+                if ($isCheckbox) {
+                    // JSON true/false comes back as 1/0 (MariaDB) or true/false (MySQL).
+                    return $value === '1'
+                        ? $list->where([$column . " IN ('1', 'true')" => [$path]])
+                        : $list->where([sprintf("COALESCE(%s, '0') IN ('0', 'false')", $column) => [$path]]);
+                }
+                return $list->where([$column . ' = ?' => [$path, (string) $value]]);
+            });
+    }
+
+    /**
+     * Whether the current member may read the field in at least one status
+     * (used to offer filters on custom fields).
+     */
+    private function mayEverRead(string $field): bool
+    {
+        $actor = $this->flowActor();
+        $workflow = $this->flowWorkflow();
+        if (!$actor || !$workflow) {
+            return false;
+        }
+        $class = $this->getManagedModel();
+        foreach (Status::get()->filter('WorkflowID', $workflow->ID) as $status) {
+            $record = $class::create();
+            $record->setField('FlowStatusID', $status->ID);
+            if (FieldAccess::singleton()->canRead($record, $actor, $field)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ─── Form and view: custom fields ────────────────────────────────────────
+
+    protected function formFields(FieldList $fields): FieldList
+    {
+        $fields = parent::formFields($fields);
+        $id = $this->currentRecordID();
+        $record = $id ? $this->findRecord($id, 'canEdit') : null;
+        $class = $this->getManagedModel();
+        return CustomFieldUi::addFormFields($fields, $record ?? $class::singleton());
+    }
+
+    protected function viewFieldRows(DataObject $record): array
+    {
+        return array_merge(parent::viewFieldRows($record), CustomFieldUi::viewRows($record));
     }
 
     // ─── Record actions and edit links ───────────────────────────────────────

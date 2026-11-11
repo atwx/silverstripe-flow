@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Config;
 
+use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
@@ -90,6 +91,7 @@ class ConfigImporter
             'statuses' => $this->importStatus(...),
             'transitions' => $this->importTransition(...),
             'field_groups' => $this->importFieldGroup(...),
+            'custom_fields' => $this->importCustomField(...),
             'permissions' => $this->importPermission(...),
         ];
         foreach ($sections as $key => $importer) {
@@ -195,6 +197,31 @@ class ConfigImporter
         $group->Title = $this->string($definition, 'title', $path);
         $group->Sort = $index + 1;
         $this->save($group, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importCustomField(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $custom = $this->child(CustomField::class, $workflow, $code);
+        $custom->Title = $this->string($definition, 'title', $path);
+        $custom->Type = $this->string($definition, 'type', $path);
+        $groupCode = $this->string($definition, 'group', $path);
+        $group = FieldGroup::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $groupCode])->first();
+        if (!$group) {
+            throw new ConfigException("{$path} ({$code}): unknown field group \"{$groupCode}\".");
+        }
+        $custom->FieldGroupID = $group->ID;
+        $options = $definition['options'] ?? [];
+        if (!is_array($options)) {
+            throw new ConfigException("{$path} ({$code}): \"options\" must be a mapping.");
+        }
+        $custom->setOptionMap(array_map('strval', $options));
+        $custom->ShowInList = (bool) ($definition['list'] ?? false);
+        $custom->Sort = $index + 1;
+        $this->save($custom, "{$path} ({$code})");
     }
 
     /**

@@ -26,6 +26,7 @@ use SilverStripe\ORM\HasManyList;
  * @property int $WorkflowID
  * @method Workflow Workflow()
  * @method HasManyList<FieldPermission> Permissions()
+ * @method HasManyList<CustomField> CustomFields()
  */
 class FieldGroup extends DataObject
 {
@@ -50,10 +51,12 @@ class FieldGroup extends DataObject
 
     private static array $has_many = [
         'Permissions' => FieldPermission::class,
+        'CustomFields' => CustomField::class,
     ];
 
     private static array $cascade_deletes = [
         'Permissions',
+        'CustomFields',
     ];
 
     private static array $indexes = [
@@ -86,6 +89,28 @@ class FieldGroup extends DataObject
             ];
         }
         return $groups;
+    }
+
+    /**
+     * Fields per group code of a workflow: the fields declared by the class and
+     * the custom fields of the group (as form field names "Flow_<code>").
+     *
+     * @return array<string, array<int, string>>
+     */
+    public static function fieldsFor(Workflow $workflow): array
+    {
+        $fields = [];
+        foreach (self::declaredFor((string) $workflow->CaseClass) as $code => $definition) {
+            $fields[$code] = $definition['fields'];
+        }
+        $groupCodes = self::get()->filter('WorkflowID', $workflow->ID)->map('ID', 'Code')->toArray();
+        foreach (CustomField::get()->filter('WorkflowID', $workflow->ID) as $custom) {
+            $code = $groupCodes[$custom->FieldGroupID] ?? null;
+            if ($code !== null) {
+                $fields[$code][] = $custom->formFieldName();
+            }
+        }
+        return $fields;
     }
 
     /**
@@ -161,7 +186,7 @@ class FieldGroup extends DataObject
     public function getCMSFields(): FieldList
     {
         $fields = parent::getCMSFields();
-        $fields->removeByName(['WorkflowID', 'Permissions']);
+        $fields->removeByName(['WorkflowID', 'Permissions', 'CustomFields']);
         $this->lockCode($fields);
         return $fields;
     }
