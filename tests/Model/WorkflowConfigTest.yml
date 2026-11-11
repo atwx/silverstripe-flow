@@ -1,0 +1,102 @@
+SilverStripe\Security\Group:
+  organisers:
+    Title: Organisation
+    Code: organisers
+  readers:
+    Title: Lesend
+    Code: readers
+
+SilverStripe\Security\Permission:
+  configure:
+    Code: FLOW_CONFIGURE
+    Group: =>SilverStripe\Security\Group.organisers
+
+SilverStripe\Security\Member:
+  organiser:
+    Email: organiser@example.com
+    Groups: =>SilverStripe\Security\Group.organisers
+  reader:
+    Email: reader@example.com
+    Groups: =>SilverStripe\Security\Group.readers
+
+Atwx\Flow\Model\Workflow:
+  course:
+    Code: course
+    Title: Kurs
+    CaseClass: Atwx\Flow\Tests\Stubs\TestCourse
+  application:
+    Code: application
+    Title: Antrag
+    CaseClass: Atwx\Flow\Tests\Stubs\TestApplication
+
+Atwx\Flow\Model\Phase:
+  planning:
+    Code: planning
+    Title: Planung
+    Sort: 1
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+  execution:
+    Code: execution
+    Title: Durchführung
+    Sort: 2
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+  intake:
+    Code: intake
+    Title: Eingang
+    Workflow: =>Atwx\Flow\Model\Workflow.application
+
+Atwx\Flow\Model\Status:
+  draft:
+    Code: draft
+    Title: Entwurf
+    Sort: 1
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+    Phase: =>Atwx\Flow\Model\Phase.planning
+  review:
+    Code: review
+    Title: In Prüfung
+    Sort: 2
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+    Phase: =>Atwx\Flow\Model\Phase.planning
+  done:
+    Code: done
+    Title: Abgeschlossen
+    Sort: 3
+    IsFinal: true
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+    Phase: =>Atwx\Flow\Model\Phase.execution
+  received:
+    Code: received
+    Title: Eingegangen
+    Workflow: =>Atwx\Flow\Model\Workflow.application
+    Phase: =>Atwx\Flow\Model\Phase.intake
+
+Atwx\Flow\Model\FlowRole:
+  organisers:
+    Code: organisers
+    Title: Organisation
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+    Group: =>SilverStripe\Security\Group.organisers
+  speaker:
+    Code: speaker
+    Title: Referent:in
+    IsExternal: true
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+  clerk:
+    Code: clerk
+    Title: Sachbearbeitung
+    Workflow: =>Atwx\Flow\Model\Workflow.application
+    Group: =>SilverStripe\Security\Group.organisers
+
+Atwx\Flow\Model\Transition:
+  draft_review:
+    Title: Zur Prüfung
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+    From: =>Atwx\Flow\Model\Status.draft
+    To: =>Atwx\Flow\Model\Status.review
+    Roles: =>Atwx\Flow\Model\FlowRole.organisers,=>Atwx\Flow\Model\FlowRole.speaker
+  review_done:
+    Workflow: =>Atwx\Flow\Model\Workflow.course
+    From: =>Atwx\Flow\Model\Status.review
+    To: =>Atwx\Flow\Model\Status.done
+    Roles: =>Atwx\Flow\Model\FlowRole.organisers

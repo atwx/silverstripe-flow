@@ -2,3 +2,7 @@
 Name: silverstripe-flow
 ---
 # Module configuration for atwx/silverstripe-flow.
+
+Atwx\Flow\Model\Workflow:
+  # Data classes that can be chosen as case file class of a workflow.
+  case_classes: []

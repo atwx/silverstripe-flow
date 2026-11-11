@@ -29,8 +29,9 @@
     ],
     "require": {
         "php": "^8.4",
-        "silverstripe/framework": "^6",
-        "atwx/silverstripe-frontdesk-kit": "dev-main"
+        "atwx/silverstripe-frontdesk-kit": "dev-main",
+        "silverstripe/admin": "^3",
+        "silverstripe/framework": "^6"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.3",

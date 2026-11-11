@@ -12,6 +12,22 @@ An extension turns any domain class into a case file with:
 - a timeline of notes, status changes and link accesses
 - configuration as database records, importable/exportable as YAML
 
+## Configuration
+
+Workflows are maintained in the CMS under *Abläufe* (`FlowAdmin`), which needs the
+permission `FLOW_CONFIGURE`. A workflow belongs to one domain class and holds
+phases, statuses, transitions (with the roles allowed to perform them) and roles
+(internal roles map to a security group, external roles act through edit links).
+Every record has a stable `Code` for configuration files and hooks.
+
+The classes offered as case file class are configured for now:
+
+```yaml
+Atwx\Flow\Model\Workflow:
+  case_classes:
+    - App\Models\Event
+```
+
 > Status: under construction (MVP). The demo project is
 > [`atwx/silverstripe-flow-demo`](https://github.com/atwx/silverstripe-flow-demo).
 
@@ -37,8 +53,12 @@ Projects/
 
 ```sh
 cd ../silverstripe-flow-demo
-ddev exec vendor/bin/phpunit -c vendor/atwx/silverstripe-flow/phpunit.xml.dist
+ddev flow-test                      # all module tests
+ddev flow-test --filter Workflow    # PHPUnit arguments are passed through
 ```
+
+`ddev flow-test` runs PHPUnit with the root DB user (SapphireTest creates temporary
+databases) and a fresh manifest.
 
 ### Running the tools standalone (as in CI)
 
