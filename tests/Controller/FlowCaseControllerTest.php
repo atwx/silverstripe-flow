@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Tests\Controller;
 
 use Atwx\Flow\Config\ConfigImporter;
+use Atwx\Flow\Controller\AccessLinkSubController;
 use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\Workflow;
@@ -17,6 +18,7 @@ use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Group;
 use SilverStripe\Security\Member;
+use SilverStripe\Security\Permission;
 
 class FlowCaseControllerTest extends SapphireTest
 {
@@ -66,6 +68,35 @@ class FlowCaseControllerTest extends SapphireTest
         $this->assertSame('read', $layout->levelFor('Title'));
         $this->assertSame('read', $layout->levelFor('InternalNote'));
         $this->assertSame('hidden', $layout->levelFor('NotInAnyGroup'), 'default is hidden');
+    }
+
+    public function testLayoutGroupsAreKeyedByCode(): void
+    {
+        $this->logInTo('readers');
+        $layout = TestCourseController::create()->layout($this->courseIn('draft'));
+        $this->assertNotNull($layout);
+        $this->assertSame(['basics', 'announcement', 'organisation'], array_column($layout->getGroups(), 'key'));
+    }
+
+    public function testHeaderShowsStatusAndPhase(): void
+    {
+        $this->logInTo('readers');
+        $fields = TestCourseController::create()->headerFields($this->courseIn('draft'));
+        $this->assertNotNull($fields);
+        $this->assertSame(['Status', 'Phase'], $fields->column('Label'));
+        $this->assertSame('Entwurf', $fields->first()->Value);
+    }
+
+    public function testEditLinksAreOnlyListedForEditors(): void
+    {
+        $course = $this->courseIn('draft');
+        $this->logInTo('readers');
+        $this->assertFalse(TestCourseController::create()->showsSubController(AccessLinkSubController::class, $course));
+        $organisers = Group::get()->find('Code', 'organisers');
+        $this->assertNotNull($organisers);
+        Permission::grant($organisers->ID, TestCourseController::singleton()->getPermissionCode('EDIT'));
+        $this->logInTo('organisers');
+        $this->assertTrue(TestCourseController::create()->showsSubController(AccessLinkSubController::class, $course));
     }
 
     public function testLayoutForNewRecordUsesInitialStatus(): void

@@ -27,7 +27,7 @@ class FlowFieldLayout
         $fields = FieldGroup::fieldsFor($workflow);
         foreach (FieldGroup::get()->filter('WorkflowID', $workflow->ID) as $group) {
             if (isset($fields[$group->Code])) {
-                $layout->group((string) $group->Title, $fields[$group->Code]);
+                $layout->group((string) $group->Title, $fields[$group->Code], true, (string) $group->Code);
             }
         }
         if ($actor) {
