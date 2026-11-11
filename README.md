@@ -39,20 +39,13 @@ Atwx\Flow\Model\Workflow:
 
 ## Development
 
-During the MVP the module, the kit and the demo are developed side by side as
-Composer `path` repositories:
-
-```
-Projects/
-  silverstripe-flow/              # this module
-  silverstripe-frontdesk-kit/     # the kit (dev-main)
-  silverstripe-flow-demo/         # demo project (ddev), mounts both siblings
-```
-
-### Running the tools inside the demo (recommended)
+The module is developed inside the demo project
+[`atwx/silverstripe-flow-demo`](https://github.com/atwx/silverstripe-flow-demo):
+there it is installed from source, so `vendor/atwx/silverstripe-flow` is a git clone
+of this repository (see the demo README).
 
 ```sh
-cd ../silverstripe-flow-demo
+cd silverstripe-flow-demo
 ddev flow-test                      # all module tests
 ddev flow-test --filter Workflow    # PHPUnit arguments are passed through
 ```
@@ -60,22 +53,17 @@ ddev flow-test --filter Workflow    # PHPUnit arguments are passed through
 `ddev flow-test` runs PHPUnit with the root DB user (SapphireTest creates temporary
 databases) and a fresh manifest.
 
-### Running the tools standalone (as in CI)
+### Standalone (as in CI)
 
-From the demo's ddev container, where this checkout is mounted at
-`/var/www/silverstripe-flow`:
+CI installs the module on its own, with `atwx/silverstripe-frontdesk-kit` checked out
+next to it as a Composer `path` repository (`../silverstripe-frontdesk-kit`), and runs:
 
 ```sh
-ddev exec -d /var/www/silverstripe-flow composer install
-ddev exec -d /var/www/silverstripe-flow composer lint      # PHPCS (PSR-12)
-ddev exec -d /var/www/silverstripe-flow composer phpstan   # PHPStan + Silverstan
-ddev exec -d /var/www/silverstripe-flow \
-    SS_DATABASE_CLASS=MySQLDatabase SS_DATABASE_SERVER=db \
-    SS_DATABASE_USERNAME=root SS_DATABASE_PASSWORD=root SS_DATABASE_NAME=flow_test \
-    composer test
+composer install
+composer lint      # PHPCS (PSR-12)
+composer phpstan   # PHPStan + Silverstan
+composer test      # PHPUnit, needs SS_DATABASE_* with CREATE DATABASE privileges
 ```
-
-The test database user needs `CREATE DATABASE` privileges (`root` in ddev).
 
 ## License
 
