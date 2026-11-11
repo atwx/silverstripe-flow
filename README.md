@@ -7,10 +7,136 @@ An extension turns any domain class into a case file with:
 
 - phases and statuses with allowed transitions per role and a status history
 - field permissions per field group × role × status (hidden / read / write)
-- signed, revocable edit links for external collaborators without an account
+- revocable edit links for external collaborators without an account (random token, stored as hash)
 - custom fields stored as JSON, usable in forms, lists, filters and exports
 - a timeline of notes, status changes and link accesses
 - configuration as database records, importable/exportable as YAML
+
+## Requirements
+
+- PHP 8.4
+- Silverstripe framework 6
+- `atwx/silverstripe-frontdesk-kit` (dev-main during the MVP)
+
+## Quick start
+
+The module is not on Packagist yet; add the repository first:
+
+```sh
+composer config repositories.flow vcs https://github.com/atwx/silverstripe-flow.git
+composer require atwx/silverstripe-flow:dev-main
+```
+
+1. Make a domain class a case file and group its fields:
+
+   ```php
+   class Event extends DataObject
+   {
+       private static array $extensions = [CaseFileExtension::class];
+
+       private static array $flow_field_groups = [
+           'basics' => ['title' => 'Eckdaten', 'fields' => ['Title', 'StartDate']],
+           'announcement' => ['title' => 'Ausschreibung', 'fields' => ['Description']],
+       ];
+   }
+   ```
+
+2. Configure the workflow in the CMS (*Abläufe*) or import a YAML file
+   (`sake flow:import-config app/_flow/config.yml`, see below).
+3. Add a frontdesk controller for the list, form and record view:
+
+   ```php
+   class EventController extends FlowCaseController
+   {
+       private static string $managed_model = Event::class;
+       private static string $url_segment = 'events';
+       private static string $title = 'Veranstaltungen';
+   }
+   ```
+
+   ```yaml
+   SilverStripe\Control\Director:
+     rules:
+       'events//$Action/$ID/$OtherID': App\Controllers\EventController
+   ```
+
+4. `sake db:build --flush`; give the groups the frontdesk permissions
+   (`FDK_EVENTS_VIEW`, `FDK_EVENTS_EDIT`) and the configuring members `FLOW_CONFIGURE`.
+
+The demo project [`atwx/silverstripe-flow-demo`](https://github.com/atwx/silverstripe-flow-demo)
+shows a complete setup, including end-to-end tests.
+
+## Case files
+
+Any data class becomes a case file through the extension:
+
+```yaml
+App\Models\Event:
+  extensions:
+    - Atwx\Flow\Extension\CaseFileExtension
+```
+
+It adds the status (`FlowStatus`) and the status history (`FlowStatusChanges`).
+New records start in the initial status of the workflow for their class. The status
+only changes through the `TransitionService`; writing `FlowStatusID` directly is
+ignored.
+
+```php
+$event->availableTransitions();               // for the current member
+$event->transitionTo('in_review', null, 'Comment');
+```
+
+Rights come from roles: a logged-in member has every internal role whose group
+they are in. Hooks on the domain class (or its extensions) and on the service:
+
+- `onBeforeTransition(Transition $transition, FlowActor $actor, string $comment)`,
+  inside the database transaction; throw a `TransitionException` to refuse
+- `onAfterTransition(StatusChange $change, FlowActor $actor)`, after commit
+
+Extensions of `TransitionService` receive the case file as additional first argument.
+
+> Status: under construction (MVP). The demo project is
+> [`atwx/silverstripe-flow-demo`](https://github.com/atwx/silverstripe-flow-demo).
+
+## Field groups and permissions
+
+The domain class groups its fields; permissions are granted per group, role and
+status. Use the form field names (e.g. `VenueID` for a has_one).
+
+```php
+private static array $flow_field_groups = [
+    'basics' => ['title' => 'Eckdaten', 'fields' => ['Title', 'Date', 'VenueID']],
+    'announcement' => ['title' => 'Ausschreibung', 'fields' => ['Description']],
+];
+```
+
+The groups are created per workflow (on save and on `dev/build`); title and order
+are maintained in the CMS. A permission entry sets the level (`hidden`, `read`,
+`write`) of a role for a group, in one status or in all statuses:
+
+- an entry for the current status beats an entry for all statuses,
+- without an entry the group is hidden, fields in no group are hidden,
+- an actor with several roles gets the highest level.
+
+`FieldAccess` is the only place that applies these rules: `fieldLevels()`,
+`writableFields()`, `readableFields()` and `filterWritable()`, which drops every
+submitted value the actor may not write.
+
+In the configuration file:
+
+```yaml
+    field_groups:
+      - code: announcement
+        title: Ausschreibung
+    permissions:
+      - group: announcement
+        role: speaker
+        level: read
+      - group: announcement
+        role: speaker
+        status: with_speaker      # omit for all statuses
+        level: write
+```
 
 ## Configuration
 
@@ -89,6 +215,24 @@ class EventController extends FlowCaseController
 
 Extensions can add entries to the timeline with `updateFlowTimeline(ArrayList $entries, DataObject $record)`.
 
+## Edit links
+
+People without an account work on a case file through an edit link. Members who
+may edit create links in the case file (sub-list "Edit links": name, optional
+email, external role, optional expiry date); the link is shown once and, with an
+email address, sent to the person. Only a SHA-256 hash of the 32-byte token is
+stored.
+
+The link page `/flow/link/<token>` (`AccessLinkController`, built on the kit's
+`StandaloneRecordController`) shows the fields of the link's role, saves only
+writable fields and offers only the role's transitions. A link works until it is
+revoked ("Revoke edit link" in the case file), its expiry date has passed or the
+case file reaches a final status; otherwise the page answers 404. Opening the
+page, saving, status changes and notes via a link appear in the timeline.
+
+Projects override the main template `FrontdeskStandalonePage` to load their own
+styles.
+
 ## Custom fields
 
 Customers add fields without a deployment: in the CMS (workflow → *Custom fields*)
@@ -121,101 +265,18 @@ In the configuration file:
         list: true                # column in the list and the export
 ```
 
-## Edit links
+## Extension points
 
-People without an account work on a case file through an edit link. Members who
-may edit create links in the case file (sub-list "Edit links": name, optional
-email, external role, optional expiry date); the link is shown once and, with an
-email address, sent to the person. Only a SHA-256 hash of the 32-byte token is
-stored.
+| Hook | Where | Use |
+|---|---|---|
+| `onBeforeTransition(Transition, FlowActor, string $comment)` | domain class / its extensions; `TransitionService` extensions (case file first) | refuse a status change by throwing `TransitionException` (inside the transaction) |
+| `onAfterTransition(StatusChange, FlowActor)` | same | notifications etc. after commit |
+| `onAfterFlowNote(Note, FlowActor)` | domain class / its extensions | react to new notes |
+| `updateFlowTimeline(ArrayList $entries, DataObject $record)` | `FlowCaseController` extensions | add timeline entries |
+| `$flow_field_groups` | domain class config | fields per group |
 
-The link page `/flow/link/<token>` (`AccessLinkController`, built on the kit's
-`StandaloneRecordController`) shows the fields of the link's role, saves only
-writable fields and offers only the role's transitions. A link works until it is
-revoked ("Revoke edit link" in the case file), its expiry date has passed or the
-case file reaches a final status; otherwise the page answers 404. Opening the
-page, saving, status changes and notes via a link appear in the timeline.
-
-Projects override the main template `FrontdeskStandalonePage` to load their own
-styles.
-
-## Field groups and permissions
-
-The domain class groups its fields; permissions are granted per group, role and
-status. Use the form field names (e.g. `VenueID` for a has_one).
-
-```php
-private static array $flow_field_groups = [
-    'basics' => ['title' => 'Eckdaten', 'fields' => ['Title', 'Date', 'VenueID']],
-    'announcement' => ['title' => 'Ausschreibung', 'fields' => ['Description']],
-];
-```
-
-The groups are created per workflow (on save and on `dev/build`); title and order
-are maintained in the CMS. A permission entry sets the level (`hidden`, `read`,
-`write`) of a role for a group, in one status or in all statuses:
-
-- an entry for the current status beats an entry for all statuses,
-- without an entry the group is hidden, fields in no group are hidden,
-- an actor with several roles gets the highest level.
-
-`FieldAccess` is the only place that applies these rules: `fieldLevels()`,
-`writableFields()`, `readableFields()` and `filterWritable()`, which drops every
-submitted value the actor may not write.
-
-In the configuration file:
-
-```yaml
-    field_groups:
-      - code: announcement
-        title: Ausschreibung
-    permissions:
-      - group: announcement
-        role: speaker
-        level: read
-      - group: announcement
-        role: speaker
-        status: with_speaker      # omit for all statuses
-        level: write
-```
-
-## Case files
-
-Any data class becomes a case file through the extension:
-
-```yaml
-App\Models\Event:
-  extensions:
-    - Atwx\Flow\Extension\CaseFileExtension
-```
-
-It adds the status (`FlowStatus`) and the status history (`FlowStatusChanges`).
-New records start in the initial status of the workflow for their class. The status
-only changes through the `TransitionService`; writing `FlowStatusID` directly is
-ignored.
-
-```php
-$event->availableTransitions();               // for the current member
-$event->transitionTo('in_review', null, 'Comment');
-```
-
-Rights come from roles: a logged-in member has every internal role whose group
-they are in. Hooks on the domain class (or its extensions) and on the service:
-
-- `onBeforeTransition(Transition $transition, FlowActor $actor, string $comment)`,
-  inside the database transaction; throw a `TransitionException` to refuse
-- `onAfterTransition(StatusChange $change, FlowActor $actor)`, after commit
-
-Extensions of `TransitionService` receive the case file as additional first argument.
-
-> Status: under construction (MVP). The demo project is
-> [`atwx/silverstripe-flow-demo`](https://github.com/atwx/silverstripe-flow-demo).
-
-## Requirements
-
-- PHP 8.4
-- Silverstripe framework 6
-- `atwx/silverstripe-frontdesk-kit` (dev-main during the MVP)
+Actors are `FlowActor`s: `MemberActor` (logged-in member, roles from groups) and
+`AccessLinkActor` (edit link, the link's external role).
 
 ## Development
 
