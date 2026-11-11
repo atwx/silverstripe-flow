@@ -5,6 +5,7 @@ namespace Atwx\Flow\Model;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\Security\Group;
 
@@ -23,6 +24,7 @@ use SilverStripe\Security\Group;
  * @method Workflow Workflow()
  * @method Group Group()
  * @method ManyManyList<Transition> Transitions()
+ * @method HasManyList<FieldPermission> FieldPermissions()
  */
 class FlowRole extends DataObject
 {
@@ -40,6 +42,14 @@ class FlowRole extends DataObject
     private static array $has_one = [
         'Workflow' => Workflow::class,
         'Group' => Group::class,
+    ];
+
+    private static array $has_many = [
+        'FieldPermissions' => FieldPermission::class . '.Role',
+    ];
+
+    private static array $cascade_deletes = [
+        'FieldPermissions',
     ];
 
     private static array $belongs_many_many = [
@@ -76,7 +86,7 @@ class FlowRole extends DataObject
     public function getCMSFields(): FieldList
     {
         $fields = parent::getCMSFields();
-        $fields->removeByName(['WorkflowID', 'Transitions']);
+        $fields->removeByName(['WorkflowID', 'Transitions', 'FieldPermissions']);
         $this->lockCode($fields);
         $fields->dataFieldByName('GroupID')?->setDescription(_t(
             self::class . '.GROUP_DESCRIPTION',

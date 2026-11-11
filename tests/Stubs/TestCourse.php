@@ -11,6 +11,10 @@ use SilverStripe\ORM\DataObject;
  *
  * @mixin CaseFileExtension
  * @property string $Title
+ * @property string $Venue
+ * @property string $Description
+ * @property string $Audience
+ * @property string $InternalNote
  */
 class TestCourse extends DataObject implements TestOnly
 {
@@ -22,5 +26,15 @@ class TestCourse extends DataObject implements TestOnly
 
     private static array $db = [
         'Title' => 'Varchar(255)',
+        'Venue' => 'Varchar(255)',
+        'Description' => 'Text',
+        'Audience' => 'Varchar(255)',
+        'InternalNote' => 'Text',
+    ];
+
+    private static array $flow_field_groups = [
+        'basics' => ['title' => 'Eckdaten', 'fields' => ['Title', 'Venue']],
+        'announcement' => ['title' => 'Ausschreibung', 'fields' => ['Description', 'Audience']],
+        'organisation' => ['InternalNote'],
     ];
 }

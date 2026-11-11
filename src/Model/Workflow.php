@@ -8,6 +8,7 @@ use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
+use SilverStripe\Forms\GridField\GridFieldAddNewButton;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordEditor;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\HasManyList;
@@ -24,6 +25,8 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<Status> Statuses()
  * @method HasManyList<Transition> Transitions()
  * @method HasManyList<FlowRole> Roles()
+ * @method HasManyList<FieldGroup> FieldGroups()
+ * @method HasManyList<FieldPermission> FieldPermissions()
  */
 class Workflow extends DataObject
 {
@@ -46,9 +49,13 @@ class Workflow extends DataObject
         'Statuses' => Status::class,
         'Transitions' => Transition::class,
         'Roles' => FlowRole::class,
+        'FieldGroups' => FieldGroup::class,
+        'FieldPermissions' => FieldPermission::class,
     ];
 
     private static array $cascade_deletes = [
+        'FieldPermissions',
+        'FieldGroups',
         'Transitions',
         'Statuses',
         'Phases',
@@ -97,11 +104,18 @@ class Workflow extends DataObject
         }
 
         // Child records can only be created inside their workflow, never linked across workflows.
-        foreach (['Phases', 'Statuses', 'Transitions', 'Roles'] as $relation) {
+        foreach (['Phases', 'Statuses', 'Transitions', 'Roles', 'FieldPermissions'] as $relation) {
             $grid = $fields->dataFieldByName($relation);
             if ($grid instanceof GridField) {
                 $grid->setConfig(GridFieldConfig_RecordEditor::create());
             }
+        }
+        // Field groups come from code: titles and order are editable, nothing else.
+        $grid = $fields->dataFieldByName('FieldGroups');
+        if ($grid instanceof GridField) {
+            $config = GridFieldConfig_RecordEditor::create();
+            $config->removeComponentsByType(GridFieldAddNewButton::class);
+            $grid->setConfig($config);
         }
 
         return $fields;
@@ -138,6 +152,23 @@ class Workflow extends DataObject
         }
 
         return $result;
+    }
+
+    protected function onAfterWrite(): void
+    {
+        parent::onAfterWrite();
+        FieldGroup::syncWorkflow($this);
+    }
+
+    /**
+     * Create declared field groups on dev/build (e.g. after a deployment added one).
+     */
+    public function requireDefaultRecords(): void
+    {
+        parent::requireDefaultRecords();
+        foreach (self::get() as $workflow) {
+            FieldGroup::syncWorkflow($workflow);
+        }
     }
 
     /**

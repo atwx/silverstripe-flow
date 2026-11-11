@@ -2,6 +2,8 @@
 
 namespace Atwx\Flow\Config;
 
+use Atwx\Flow\Model\FieldGroup;
+use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Phase;
 use Atwx\Flow\Model\Status;
@@ -87,6 +89,8 @@ class ConfigImporter
             'phases' => $this->importPhase(...),
             'statuses' => $this->importStatus(...),
             'transitions' => $this->importTransition(...),
+            'field_groups' => $this->importFieldGroup(...),
+            'permissions' => $this->importPermission(...),
         ];
         foreach ($sections as $key => $importer) {
             foreach ($this->list($definition, $key, $path) as $index => $entry) {
@@ -174,6 +178,49 @@ class ConfigImporter
             $roleIDs[] = $role->ID;
         }
         $transition->Roles()->setByIDList($roleIDs);
+    }
+
+    /**
+     * Field groups are declared in code; the file sets title and order.
+     *
+     * @param array<string, mixed> $definition
+     */
+    private function importFieldGroup(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $group = $this->child(FieldGroup::class, $workflow, $code);
+        if (!$group->isInDB() && !isset(FieldGroup::declaredFor($workflow->CaseClass)[$code])) {
+            throw new ConfigException("{$path} ({$code}): field group is not declared by {$workflow->CaseClass}.");
+        }
+        $group->Title = $this->string($definition, 'title', $path);
+        $group->Sort = $index + 1;
+        $this->save($group, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importPermission(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $groupCode = $this->string($definition, 'group', $path);
+        $group = FieldGroup::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $groupCode])->first();
+        if (!$group) {
+            throw new ConfigException("{$path}: unknown field group \"{$groupCode}\".");
+        }
+        $roleCode = $this->string($definition, 'role', $path);
+        $role = FlowRole::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $roleCode])->first();
+        if (!$role) {
+            throw new ConfigException("{$path}: unknown role \"{$roleCode}\".");
+        }
+        $statusID = isset($definition['status'])
+            ? $this->status($workflow, (string) $definition['status'], $path)->ID
+            : 0;
+
+        $filter = ['FieldGroupID' => $group->ID, 'RoleID' => $role->ID, 'StatusID' => $statusID];
+        $permission = FieldPermission::get()->filter($filter)->first()
+            ?? FieldPermission::create($filter + ['WorkflowID' => $workflow->ID]);
+        $permission->Level = $this->string($definition, 'level', $path);
+        $this->save($permission, $path);
     }
 
     /**

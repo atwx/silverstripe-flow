@@ -69,6 +69,46 @@ workflows:
 The export writes the same canonical format, so an exported file can be imported
 again unchanged.
 
+## Field groups and permissions
+
+The domain class groups its fields; permissions are granted per group, role and
+status. Use the form field names (e.g. `VenueID` for a has_one).
+
+```php
+private static array $flow_field_groups = [
+    'basics' => ['title' => 'Eckdaten', 'fields' => ['Title', 'Date', 'VenueID']],
+    'announcement' => ['title' => 'Ausschreibung', 'fields' => ['Description']],
+];
+```
+
+The groups are created per workflow (on save and on `dev/build`); title and order
+are maintained in the CMS. A permission entry sets the level (`hidden`, `read`,
+`write`) of a role for a group, in one status or in all statuses:
+
+- an entry for the current status beats an entry for all statuses,
+- without an entry the group is hidden, fields in no group are hidden,
+- an actor with several roles gets the highest level.
+
+`FieldAccess` is the only place that applies these rules: `fieldLevels()`,
+`writableFields()`, `readableFields()` and `filterWritable()`, which drops every
+submitted value the actor may not write.
+
+In the configuration file:
+
+```yaml
+    field_groups:
+      - code: announcement
+        title: Ausschreibung
+    permissions:
+      - group: announcement
+        role: speaker
+        level: read
+      - group: announcement
+        role: speaker
+        status: with_speaker      # omit for all statuses
+        level: write
+```
+
 ## Case files
 
 Any data class becomes a case file through the extension:

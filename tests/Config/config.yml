@@ -22,6 +22,8 @@ workflows:
       - from: received
         to: approved
         roles: [clerk]
+    field_groups: []
+    permissions: []
   - code: course
     title: Kurs
     class: Atwx\Flow\Tests\Stubs\TestCourse
@@ -67,3 +69,47 @@ workflows:
       - from: review
         to: done
         roles: [organisers]
+    field_groups:
+      - code: basics
+        title: Eckdaten
+      - code: announcement
+        title: Ausschreibung
+      - code: organisation
+        title: Organisation
+    permissions:
+      - group: basics
+        role: organisers
+        level: write
+      - group: basics
+        role: readers
+        level: read
+      - group: basics
+        role: speaker
+        level: read
+      - group: announcement
+        role: organisers
+        level: write
+      - group: announcement
+        role: organisers
+        status: done
+        level: read
+      - group: announcement
+        role: readers
+        level: read
+      - group: announcement
+        role: speaker
+        level: read
+      - group: announcement
+        role: speaker
+        status: with_speaker
+        level: write
+      - group: announcement
+        role: speaker
+        status: done
+        level: hidden
+      - group: organisation
+        role: organisers
+        level: write
+      - group: organisation
+        role: readers
+        level: read

@@ -2,6 +2,8 @@
 
 namespace Atwx\Flow\Config;
 
+use Atwx\Flow\Model\FieldGroup;
+use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Phase;
 use Atwx\Flow\Model\Status;
@@ -25,7 +27,12 @@ class ConfigExporter
      */
     public function toYaml(array $codes = []): string
     {
-        return Yaml::dump($this->export($codes), 5, 2, Yaml::DUMP_COMPACT_NESTED_MAPPING);
+        return Yaml::dump(
+            $this->export($codes),
+            5,
+            2,
+            Yaml::DUMP_COMPACT_NESTED_MAPPING | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE
+        );
     }
 
     /**
@@ -105,6 +112,41 @@ class ConfigExporter
             }
             $entry['roles'] = $transition->allowedRoles()->sort(['Sort' => 'ASC', 'ID' => 'ASC'])->column('Code');
             $data['transitions'][] = $entry;
+        }
+
+        $data['field_groups'] = [];
+        $groupSort = [];
+        foreach (FieldGroup::get()->filter('WorkflowID', $workflow->ID) as $group) {
+            $data['field_groups'][] = ['code' => $group->Code, 'title' => $group->Title];
+            $groupSort[$group->ID] = count($groupSort);
+        }
+
+        $roleSort = array_flip(FlowRole::get()->filter('WorkflowID', $workflow->ID)->column('ID'));
+        $statusSort = array_flip(Status::get()->filter('WorkflowID', $workflow->ID)->column('ID'));
+        $permissions = FieldPermission::get()->filter('WorkflowID', $workflow->ID)->toArray();
+        usort($permissions, fn (FieldPermission $a, FieldPermission $b) => [
+            $groupSort[$a->FieldGroupID] ?? PHP_INT_MAX,
+            $roleSort[$a->RoleID] ?? PHP_INT_MAX,
+            $a->StatusID ? ($statusSort[$a->StatusID] ?? PHP_INT_MAX) : -1,
+        ] <=> [
+            $groupSort[$b->FieldGroupID] ?? PHP_INT_MAX,
+            $roleSort[$b->RoleID] ?? PHP_INT_MAX,
+            $b->StatusID ? ($statusSort[$b->StatusID] ?? PHP_INT_MAX) : -1,
+        ]);
+        $data['permissions'] = [];
+        foreach ($permissions as $permission) {
+            $group = $permission->FieldGroup();
+            $role = $permission->Role();
+            if (!$group->exists() || !$role->exists()) {
+                continue;
+            }
+            $entry = ['group' => $group->Code, 'role' => $role->Code];
+            $status = $permission->Status();
+            if ($status->exists()) {
+                $entry['status'] = $status->Code;
+            }
+            $entry['level'] = $permission->Level;
+            $data['permissions'][] = $entry;
         }
 
         return $data;

@@ -21,6 +21,7 @@ use SilverStripe\ORM\HasManyList;
  * @method Phase Phase()
  * @method HasManyList<Transition> OutgoingTransitions()
  * @method HasManyList<Transition> IncomingTransitions()
+ * @method HasManyList<FieldPermission> FieldPermissions()
  */
 class Status extends DataObject
 {
@@ -43,11 +44,13 @@ class Status extends DataObject
     private static array $has_many = [
         'OutgoingTransitions' => Transition::class . '.From',
         'IncomingTransitions' => Transition::class . '.To',
+        'FieldPermissions' => FieldPermission::class . '.Status',
     ];
 
     private static array $cascade_deletes = [
         'OutgoingTransitions',
         'IncomingTransitions',
+        'FieldPermissions',
     ];
 
     private static array $indexes = [
@@ -81,7 +84,7 @@ class Status extends DataObject
     public function getCMSFields(): FieldList
     {
         $fields = parent::getCMSFields();
-        $fields->removeByName(['WorkflowID', 'OutgoingTransitions', 'IncomingTransitions']);
+        $fields->removeByName(['WorkflowID', 'OutgoingTransitions', 'IncomingTransitions', 'FieldPermissions']);
         $this->lockCode($fields);
 
         $fields->replaceField('PhaseID', DropdownField::create(
