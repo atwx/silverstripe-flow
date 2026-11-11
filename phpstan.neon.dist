@@ -1,0 +1,8 @@
+# Silverstan is registered automatically via phpstan/extension-installer.
+parameters:
+    level: 6
+    paths:
+        - src
+        - tests
+    excludePaths:
+        - tests/bootstrap.php

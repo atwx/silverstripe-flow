@@ -1,0 +1,10 @@
+/vendor/
+composer.lock
+.phpunit.result.cache
+/.phpunit.cache/
+/silverstripe-cache/
+.env
+.idea
+.vscode
+.DS_Store
+/public/
