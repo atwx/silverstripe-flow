@@ -245,6 +245,37 @@ $case->flowAssignee('responsible');   // ?Member
 Only candidates can be assigned; every change is stored (`AssignmentChange`).
 Assignments and their history are deleted with the case file.
 
+## Documents
+
+Templates ("Vorlagen") of a workflow turn into PDF documents of a case file:
+title (with placeholders) and an HTML body with placeholders, maintained in the
+CMS (workflow → *Templates*) or in the configuration file:
+
+```yaml
+    documents:
+      - code: travel_letter
+        title: Reisebrief
+        document_title: 'Reisebrief {{Child.FirstName}}'
+        body: '<p>Liebe Familie {{Child.Family.Surname}}, …</p>'
+```
+
+Placeholders: `{{Field}}`, `{{Relation.Field}}` (has_one chains, dates as
+dd.mm.yyyy, getters like `{{Child.Title}}`; no other methods), `{{Flow.<code>}}`
+(custom field), `{{Assignee.<code>}}` (responsibility), `{{Status}}`, `{{Today}}`,
+`{{Me.Name}}`. Values are HTML-escaped; unknown placeholders stay empty.
+
+`FlowCaseController` adds the record action *Create document* (members who may
+edit and have a role in the workflow), the sub-list *Documents* with download
+(`<segment>/documents/<ID>/download/<document>`, only for members who may view
+the case file) and an entry in the timeline. The PDF is stored protected
+(`DBFile`, not in the asset admin) and deleted with the case file.
+
+The body is rendered into the template `Atwx\Flow\Document\FlowDocument` —
+override it in the project for the letterhead. PDFs are made by the
+`PdfRenderer` service, by default with `atwx/silverstripe-headless-pdf`
+(headless Chrome; the HTML is printed from a temporary file, nothing is served
+through a URL).
+
 ## Edit links
 
 People without an account work on a case file through an edit link. Members who

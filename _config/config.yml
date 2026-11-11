@@ -4,6 +4,10 @@ Name: silverstripe-flow
 # Module configuration for atwx/silverstripe-flow.
 
 
+SilverStripe\Core\Injector\Injector:
+  Atwx\Flow\Document\PdfRenderer:
+    class: Atwx\Flow\Document\HeadlessPdfRenderer
+
 SilverStripe\Cli\Sake:
   commands:
     'flow:import-config': Atwx\Flow\Cli\ImportConfigCommand

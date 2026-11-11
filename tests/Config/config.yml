@@ -92,6 +92,11 @@ workflows:
         title: Zertifikat
         type: checkbox
         group: announcement
+    documents:
+      - code: confirmation
+        title: Bestätigung
+        document_title: 'Bestätigung {{Title}}'
+        body: '<p>Der Kurs {{Title}} in {{Venue}} hat den Status {{Status}}.</p>'
     permissions:
       - group: basics
         role: organisers
