@@ -116,7 +116,7 @@ class FieldGroup extends DataObject
      *
      * @return array<int, string>
      */
-    public function fieldNames(): array
+    public function declaredFieldNames(): array
     {
         $class = $this->caseClass();
         return $class ? (self::declaredFor($class)[$this->Code]['fields'] ?? []) : [];
@@ -130,7 +130,7 @@ class FieldGroup extends DataObject
 
     public function getFieldNames(): string
     {
-        return implode(', ', $this->fieldNames());
+        return implode(', ', $this->declaredFieldNames());
     }
 
     public function isDeclared(): bool
