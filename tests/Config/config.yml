@@ -39,6 +39,10 @@ workflows:
       - code: speaker
         title: 'Referent:in'
         external: true
+    responsibilities:
+      - code: lead
+        title: Leitung
+        role: organisers
     phases:
       - code: planning
         title: Planung

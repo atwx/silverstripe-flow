@@ -7,13 +7,14 @@ use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Phase;
+use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\Transition;
 use Atwx\Flow\Model\Workflow;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Core\Validation\ValidationException;
-use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
+use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Group;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -87,6 +88,7 @@ class ConfigImporter
         // Order matters: statuses need phases, transitions need statuses and roles.
         $sections = [
             'roles' => $this->importRole(...),
+            'responsibilities' => $this->importResponsibility(...),
             'phases' => $this->importPhase(...),
             'statuses' => $this->importStatus(...),
             'transitions' => $this->importTransition(...),
@@ -123,6 +125,24 @@ class ConfigImporter
             $role->GroupID = $this->group((string) $definition['group'], $role->Title)->ID;
         }
         $this->save($role, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importResponsibility(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $responsibility = $this->child(Responsibility::class, $workflow, $code);
+        $responsibility->Title = $this->string($definition, 'title', $path);
+        $roleCode = $this->string($definition, 'role', $path);
+        $role = FlowRole::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $roleCode])->first();
+        if (!$role) {
+            throw new ConfigException("{$path} ({$code}): unknown role \"{$roleCode}\".");
+        }
+        $responsibility->RoleID = $role->ID;
+        $responsibility->Sort = $index + 1;
+        $this->save($responsibility, "{$path} ({$code})");
     }
 
     /**

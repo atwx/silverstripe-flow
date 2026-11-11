@@ -6,6 +6,8 @@ use Atwx\Flow\Actor\AccessLinkActor;
 use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
 use Atwx\Flow\Model\AccessLink;
+use Atwx\Flow\Model\Assignment;
+use Atwx\Flow\Model\AssignmentChange;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
@@ -39,6 +41,8 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<StatusChange> FlowStatusChanges()
  * @method HasManyList<Note> FlowNotes()
  * @method HasManyList<AccessLink> FlowAccessLinks()
+ * @method HasManyList<Assignment> FlowAssignments()
+ * @method HasManyList<AssignmentChange> FlowAssignmentChanges()
  * @extends Extension<DataObject&static>
  */
 class CaseFileExtension extends Extension
@@ -55,6 +59,8 @@ class CaseFileExtension extends Extension
         'FlowStatusChanges' => StatusChange::class . '.Case',
         'FlowNotes' => Note::class . '.Case',
         'FlowAccessLinks' => AccessLink::class . '.Case',
+        'FlowAssignments' => Assignment::class . '.Case',
+        'FlowAssignmentChanges' => AssignmentChange::class . '.Case',
     ];
 
     /**
@@ -64,6 +70,8 @@ class CaseFileExtension extends Extension
         'FlowStatusChanges',
         'FlowNotes',
         'FlowAccessLinks',
+        'FlowAssignments',
+        'FlowAssignmentChanges',
     ];
 
     /**
@@ -97,6 +105,16 @@ class CaseFileExtension extends Extension
         } finally {
             unset(self::$authorisedWrites[$key]);
         }
+    }
+
+    /**
+     * The member responsible for the case file in the responsibility with this code.
+     */
+    public function flowAssignee(string $code): ?\SilverStripe\Security\Member
+    {
+        $assignment = $this->getOwner()->FlowAssignments()->filter('Responsibility.Code', $code)->first();
+        $member = $assignment?->Member();
+        return $member && $member->exists() ? $member : null;
     }
 
     /**

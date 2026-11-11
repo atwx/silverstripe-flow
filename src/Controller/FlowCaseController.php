@@ -6,15 +6,19 @@ use Atwx\Flow\Actor\FlowActor;
 use Atwx\Flow\Actor\MemberActor;
 use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Model\AccessLink;
+use Atwx\Flow\Model\Assignment;
+use Atwx\Flow\Model\AssignmentChange;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
 use Atwx\Flow\Model\LinkAccess;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Phase;
+use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
+use Atwx\Flow\Service\AssignmentService;
 use Atwx\Flow\Service\FieldAccess;
 use Atwx\Flow\Ui\CustomFieldUi;
 use Atwx\Flow\Ui\FlowFieldLayout;
@@ -25,13 +29,17 @@ use Atwx\SilverstripeFrontdeskKit\Filter\SelectFilter;
 use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
 use Atwx\SilverstripeFrontdeskKit\Table\Column;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
+use Atwx\SilverstripeFrontdeskKit\Table\ListView;
 use Atwx\SilverstripeFrontdeskKit\Table\RecordAction;
 use Atwx\SilverstripeFrontdeskKit\Table\TimelineEntry;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Model\ArrayData;
 use SilverStripe\Model\List\ArrayList;
+use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\Security\Member;
+use SilverStripe\Security\Security;
 
 /**
  * Frontdesk controller for case files.
@@ -91,6 +99,7 @@ abstract class FlowCaseController extends FrontdeskController
         $columns = parent::defineColumns();
         $this->addCustomFieldColumns($columns);
         $this->addStatusColumns($columns);
+        $this->addAssigneeColumns($columns);
         $this->protectColumns($columns);
         return $columns;
     }
@@ -112,6 +121,28 @@ abstract class FlowCaseController extends FrontdeskController
                 })
                 ->end();
         }
+    }
+
+    /**
+     * One column per responsibility with the assigned member (column "Assignee_<code>").
+     */
+    protected function addAssigneeColumns(ColumnCollection $columns): void
+    {
+        foreach ($this->responsibilities() as $responsibility) {
+            $code = (string) $responsibility->Code;
+            $columns->make('Assignee_' . $code, (string) $responsibility->Title)
+                ->format(fn ($value, DataObject $record) => (string) AssignmentService::singleton()
+                    ->assignee($record, $responsibility)?->getName())
+                ->end();
+        }
+    }
+
+    /**
+     * @return array<int, Responsibility>
+     */
+    protected function responsibilities(): array
+    {
+        return AssignmentService::singleton()->responsibilitiesFor($this->getManagedModel());
     }
 
     protected function addStatusColumns(ColumnCollection $columns): void
@@ -187,6 +218,17 @@ abstract class FlowCaseController extends FrontdeskController
                     ->options(fn () => Status::get()->filter('WorkflowID', $workflowID)->map('ID', 'Title')->toArray())
                     ->apply(fn ($list, $value) => $list->filter('FlowStatusID', (int) $value))
             );
+        foreach ($this->responsibilities() as $responsibility) {
+            $filters->add(
+                SelectFilter::create('Assignee_' . $responsibility->Code, (string) $responsibility->Title)
+                    ->options(fn () => $responsibility->candidateOptions())
+                    ->apply(fn ($list, $value) => $this->filterByAssignee(
+                        $list,
+                        [(int) $responsibility->ID],
+                        (int) $value
+                    ))
+            );
+        }
         foreach (CustomFieldUi::fieldsForClass($this->getManagedModel()) as $custom) {
             $filter = $this->customFieldFilter($custom);
             if ($filter) {
@@ -200,6 +242,43 @@ abstract class FlowCaseController extends FrontdeskController
      * Filter for a custom field of type choice or yes/no (on the JSON value).
      * Only offered to members who may read the field in some status.
      */
+    /**
+     * Case files assigned to the member in one of the responsibilities.
+     *
+     * @param DataList<DataObject> $list
+     * @param array<int, int> $responsibilityIDs
+     * @return DataList<DataObject>
+     */
+    protected function filterByAssignee(DataList $list, array $responsibilityIDs, int $memberID): DataList
+    {
+        $ids = Assignment::get()->filter([
+            'CaseClass' => $this->getManagedModel(),
+            'ResponsibilityID' => $responsibilityIDs ?: [0],
+            'MemberID' => $memberID,
+        ])->column('CaseID');
+        return $list->filter('ID', $ids ?: [0]);
+    }
+
+    /**
+     * "Meine Fälle": case files the current member is responsible for.
+     *
+     * @return array<int, ListView>
+     */
+    protected function defineListViews(): array
+    {
+        $views = parent::defineListViews();
+        $ids = array_map(fn (Responsibility $r) => (int) $r->ID, $this->responsibilities());
+        if ($ids) {
+            $views[] = ListView::create('mine', _t(self::class . '.VIEW_MINE', 'My case files'))
+                ->query(fn (DataList $list) => $this->filterByAssignee(
+                    $list,
+                    $ids,
+                    (int) Security::getCurrentUser()?->ID
+                ));
+        }
+        return $views;
+    }
+
     protected function customFieldFilter(CustomField $custom): ?SelectFilter
     {
         if (!in_array($custom->Type, ['select', 'checkbox'], true) || !$this->mayEverRead($custom->formFieldName())) {
@@ -316,6 +395,15 @@ abstract class FlowCaseController extends FrontdeskController
                 'Value' => $phase->Title,
             ]));
         }
+        foreach ($this->responsibilities() as $responsibility) {
+            $assignee = AssignmentService::singleton()->assignee($record, $responsibility);
+            if ($assignee) {
+                $fields->push(ArrayData::create([
+                    'Label' => $responsibility->Title,
+                    'Value' => $assignee->getName(),
+                ]));
+            }
+        }
         return $fields;
     }
 
@@ -346,6 +434,10 @@ abstract class FlowCaseController extends FrontdeskController
         if ($actor) {
             $actions = array_merge($actions, FlowRecordActions::forActor($record, $actor));
         }
+        $assign = $this->assignAction($record);
+        if ($assign) {
+            $actions[] = $assign;
+        }
         $revoke = $this->revokeLinkAction($record);
         if ($revoke) {
             $actions[] = $revoke;
@@ -356,6 +448,52 @@ abstract class FlowCaseController extends FrontdeskController
     /**
      * "Revoke edit link" with the usable links of the case file, for members who may edit.
      */
+    /**
+     * "Responsibility": one select per responsibility, for members who may edit.
+     */
+    protected function assignAction(DataObject $record): ?RecordAction
+    {
+        $responsibilities = $this->responsibilities();
+        $actor = $this->flowActor();
+        $workflow = $this->flowWorkflow();
+        if (!$responsibilities || !$actor || !$workflow || !$record->isInDB() || !$this->canEdit()) {
+            return null;
+        }
+        // Like status changes: only members with a role in the workflow.
+        if ($actor->flowRoleCodes($workflow, $record) === []) {
+            return null;
+        }
+        $action = RecordAction::create('flowassign', _t(self::class . '.ASSIGN', 'Responsibility'))
+            ->submitLabel(_t(self::class . '.ASSIGN_SAVE', 'Save'));
+        foreach ($responsibilities as $responsibility) {
+            $assignee = AssignmentService::singleton()->assignee($record, $responsibility);
+            $action->select(
+                (string) $responsibility->Code,
+                (string) $responsibility->Title,
+                $responsibility->candidateOptions(),
+                $assignee ? (string) $assignee->ID : '',
+                _t(self::class . '.ASSIGN_NOBODY', '– nobody –')
+            );
+        }
+        return $action->handle(function (
+            DataObject $record,
+            ?string $option,
+            string $comment,
+            array $values
+        ) use ($responsibilities) {
+            $service = AssignmentService::singleton();
+            $changed = false;
+            foreach ($responsibilities as $responsibility) {
+                $value = (int) ($values[$responsibility->Code] ?? 0);
+                $member = $value ? Member::get()->byID($value) : null;
+                $changed = $service->assign($record, $responsibility, $member, Security::getCurrentUser()) || $changed;
+            }
+            return $changed
+                ? _t(self::class . '.ASSIGN_DONE', 'Responsibility changed.')
+                : _t(self::class . '.ASSIGN_UNCHANGED', 'Nothing changed.');
+        });
+    }
+
     protected function revokeLinkAction(DataObject $record): ?RecordAction
     {
         if (!$this->canEdit()) {
@@ -394,6 +532,9 @@ abstract class FlowCaseController extends FrontdeskController
         $case = ['CaseClass' => $record->ClassName, 'CaseID' => $record->ID];
         foreach (StatusChange::get()->filter($case) as $change) {
             $entries->push($this->statusChangeEntry($change));
+        }
+        foreach (AssignmentChange::get()->filter($case) as $change) {
+            $entries->push($this->assignmentChangeEntry($change));
         }
         foreach (Note::get()->filter($case) as $note) {
             $entries->push(TimelineEntry::create(
@@ -445,6 +586,26 @@ abstract class FlowCaseController extends FrontdeskController
         }
         $this->extend('updateFlowTimeline', $entries, $record);
         return $entries;
+    }
+
+    protected function assignmentChangeEntry(AssignmentChange $change): ArrayData
+    {
+        $nobody = _t(self::class . '.ASSIGN_NOBODY_SHORT', 'nobody');
+        $from = $change->From();
+        $to = $change->To();
+        $member = $change->Member();
+        $responsibility = $change->Responsibility();
+        return TimelineEntry::create(
+            (string) $change->Created,
+            _t(self::class . '.TIMELINE_ASSIGN', '{responsibility}: {from} → {to}', [
+                'responsibility' => $responsibility->exists() ? $responsibility->Title : '?',
+                'from' => $from->exists() ? $from->getName() : $nobody,
+                'to' => $to->exists() ? $to->getName() : $nobody,
+            ]),
+            '',
+            $member->exists() ? (string) $member->getName() : '',
+            'assignment'
+        );
     }
 
     protected function statusChangeEntry(StatusChange $change): ArrayData

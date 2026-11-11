@@ -5,7 +5,9 @@ namespace Atwx\Flow\Tests\Controller;
 use Atwx\Flow\Config\ConfigImporter;
 use Atwx\Flow\Controller\AccessLinkSubController;
 use Atwx\Flow\Extension\CaseFileExtension;
+use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Model\Status;
+use Atwx\Flow\Service\AssignmentService;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Service\TransitionException;
 use Atwx\Flow\Tests\Stubs\TestApplication;
@@ -19,6 +21,9 @@ use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Group;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
+use SilverStripe\Security\Security;
+use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Control\Session;
 
 class FlowCaseControllerTest extends SapphireTest
 {
@@ -205,5 +210,65 @@ class FlowCaseControllerTest extends SapphireTest
                 $this->assertSame('', (string) $column->renderValue($course));
             }
         }
+    }
+
+    public function testResponsibilityActionColumnFilterHeaderAndTimeline(): void
+    {
+        $organisers = Group::get()->find('Code', 'organisers');
+        $this->assertNotNull($organisers);
+        Permission::grant($organisers->ID, TestCourseController::singleton()->getPermissionCode('EDIT'));
+        $this->logInTo('organisers');
+        $me = Security::getCurrentUser();
+        $this->assertNotNull($me);
+        $course = $this->courseIn('draft');
+        $other = $this->courseIn('draft');
+        $controller = TestCourseController::create();
+
+        $action = null;
+        foreach ($controller->recordActions($course) as $candidate) {
+            if ($candidate->getName() === 'flowassign') {
+                $action = $candidate;
+            }
+        }
+        $this->assertNotNull($action);
+        $this->assertSame(['lead'], array_keys($action->getSelects()));
+        $message = $action->run($course, null, '', ['lead' => (string) $me->ID]);
+        $this->assertSame('Zuständigkeit geändert.', $message);
+
+        $column = null;
+        foreach ($controller->columns() as $candidate) {
+            if ($candidate->getName() === 'Assignee_lead') {
+                $column = $candidate;
+            }
+        }
+        $this->assertNotNull($column);
+        $this->assertSame((string) $me->getName(), (string) $column->renderValue($course));
+        $this->assertSame('', (string) $column->renderValue($other));
+
+        $this->assertContains('Leitung', $controller->headerFields($course)?->column('Label') ?? []);
+        $titles = $controller->timeline($course)?->column('Title') ?? [];
+        $this->assertContains('Leitung: niemand → ' . $me->getName(), $titles);
+
+        $request = new HTTPRequest('GET', 'test-courses', ['view' => 'mine']);
+        $request->setSession(new Session([]));
+        $controller->setRequest($request);
+        $this->assertSame([(int) $course->ID], $controller->filteredIDs());
+
+        $request = new HTTPRequest('GET', 'test-courses', ['Assignee_lead' => (string) $me->ID]);
+        $request->setSession(new Session([]));
+        $controller->setRequest($request);
+        $filtered = $controller->filteredIDs();
+        $this->assertCount(1, $filtered, 'filter by assignee');
+        $this->assertSame((int) $course->ID, $filtered[0]);
+    }
+
+    public function testReadersGetNoResponsibilityAction(): void
+    {
+        $this->logInTo('readers');
+        $names = array_map(
+            fn ($action) => $action->getName(),
+            TestCourseController::create()->recordActions($this->courseIn('draft'))
+        );
+        $this->assertNotContains('flowassign', $names);
     }
 }
