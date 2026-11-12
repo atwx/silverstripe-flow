@@ -182,7 +182,11 @@ class MailTest extends SapphireTest
         $resolver = RecipientResolver::singleton();
         $this->assertSame(
             ['a@example.org', 'olga@example.com'],
-            $resolver->resolve('A@example.org; not-an-address, {{Me}}, a@example.org, Unknown.Field', $course, $this->olga)
+            $resolver->resolve(
+                'A@example.org; not-an-address, {{Me}}, a@example.org, Unknown.Field',
+                $course,
+                $this->olga
+            )
         );
         $this->assertSame([['a@example.org'], ['x@']], $resolver->parseAddresses('a@example.org, x@'));
     }
