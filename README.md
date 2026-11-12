@@ -352,7 +352,7 @@ styles.
 
 Customers add fields without a deployment: in the CMS (workflow → *Custom fields*)
 with a code (fixed once created), title, type (text, multi-line text, date, yes/no,
-choice), field group and options. Values are stored as JSON on the case file
+choice, choice from a catalog), field group and options. Values are stored as JSON on the case file
 (`FlowData`, keyed by code); in forms the fields are named `Flow_<code>`.
 
 A custom field has the permissions of its field group and appears in the form, the
@@ -378,7 +378,19 @@ In the configuration file:
         group: announcement
         options: { beginners: Einsteiger, advanced: Fortgeschrittene }
         list: true                # column in the list and the export
+      - code: channel
+        title: Akquisekanal
+        type: catalog             # entries of a frontdesk-kit catalog
+        catalog: acquisition_channel
+        group: basics
 ```
+
+A field of type `catalog` offers the active entries of a
+[frontdesk-kit catalog](https://github.com/atwx/silverstripe-frontdesk-kit/blob/main/docs/catalogs.md)
+(the catalog is declared in config and maintained under `catalogs/`). It stores the
+entry's code. An inactive entry stays on the case files that have it, and so does
+the filter on it. An entry stored on a case file counts as in use, so it cannot be
+deleted.
 
 ## Extension points
 

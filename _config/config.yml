@@ -8,6 +8,10 @@ SilverStripe\Core\Injector\Injector:
   Atwx\Flow\Document\PdfRenderer:
     class: Atwx\Flow\Document\HeadlessPdfRenderer
 
+Atwx\SilverstripeFrontdeskKit\Catalog\Catalogs:
+  extensions:
+    - Atwx\Flow\Extension\CatalogUsageExtension
+
 SilverStripe\Cli\Sake:
   commands:
     'flow:import-config': Atwx\Flow\Cli\ImportConfigCommand

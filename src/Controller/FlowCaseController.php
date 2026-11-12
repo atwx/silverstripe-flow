@@ -286,18 +286,20 @@ abstract class FlowCaseController extends FrontdeskController
 
     protected function customFieldFilter(CustomField $custom): ?SelectFilter
     {
-        if (!in_array($custom->Type, ['select', 'checkbox'], true) || !$this->mayEverRead($custom->formFieldName())) {
+        $filterable = in_array($custom->Type, ['select', 'catalog', 'checkbox'], true);
+        if (!$filterable || !$this->mayEverRead($custom->formFieldName())) {
             return null;
         }
-        $options = $custom->Type === 'select'
-            ? $custom->optionMap()
-            : ['1' => _t(CustomField::class . '.YES', 'Yes'), '0' => _t(CustomField::class . '.NO', 'No')];
+        $options = $custom->Type === 'checkbox'
+            ? ['1' => _t(CustomField::class . '.YES', 'Yes'), '0' => _t(CustomField::class . '.NO', 'No')]
+            : $custom->labels();
         $class = $this->getManagedModel();
         $table = DataObject::getSchema()->tableForField($class, 'FlowData');
         $path = '$.' . $custom->Code;
         $isCheckbox = $custom->Type === 'checkbox';
         return SelectFilter::create($custom->formFieldName(), (string) $custom->Title)
             ->options($options)
+            ->searchable($custom->Type === 'catalog')
             ->apply(function ($list, $value) use ($table, $path, $isCheckbox) {
                 $column = sprintf('JSON_VALUE("%s"."FlowData", ?)', $table);
                 if ($isCheckbox) {

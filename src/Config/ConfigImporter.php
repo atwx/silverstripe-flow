@@ -245,6 +245,7 @@ class ConfigImporter
             throw new ConfigException("{$path} ({$code}): \"options\" must be a mapping.");
         }
         $custom->setOptionMap(array_map('strval', $options));
+        $custom->Catalog = (string) ($definition['catalog'] ?? '');
         $custom->ShowInList = (bool) ($definition['list'] ?? false);
         $custom->Sort = $index + 1;
         $this->save($custom, "{$path} ({$code})");

@@ -152,6 +152,9 @@ class ConfigExporter
             if ($custom->optionMap() !== []) {
                 $entry['options'] = $custom->optionMap();
             }
+            if ($custom->Type === 'catalog') {
+                $entry['catalog'] = (string) $custom->Catalog;
+            }
             if ($custom->ShowInList) {
                 $entry['list'] = true;
             }
