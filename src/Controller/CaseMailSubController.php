@@ -265,13 +265,16 @@ class CaseMailSubController extends FrontdeskSubController
             'Placeholders are filled per entry when sending, {{Item.…}} with the entry.'
         ));
         if ($preview) {
-            $fields->insertAfter('Body', LiteralField::create('Preview', '<div class="fdk-mail-preview mb-4">'
-                . '<p class="font-semibold">' . htmlspecialchars(_t(
+            // Inline styles: utility classes in vendor code are not part of the project's CSS build.
+            $fields->insertAfter('Body', LiteralField::create('Preview', '<div class="fdk-mail-preview" '
+                . 'style="margin:1rem 0;padding:1rem;border:1px solid rgba(0,0,0,.15);border-radius:.5rem">'
+                . '<p style="font-weight:600;margin-bottom:.5rem">' . htmlspecialchars(_t(
                     self::class . '.PREVIEW',
                     'Preview for {entry}',
                     ['entry' => (string) $preview->item?->getTitle()]
-                )) . '</p><p>' . htmlspecialchars($preview->subject) . '</p>'
-                . '<pre class="whitespace-pre-wrap">' . htmlspecialchars($preview->body) . '</pre></div>'));
+                )) . '</p><p style="margin-bottom:.5rem">' . htmlspecialchars($preview->subject) . '</p>'
+                . '<div style="white-space:pre-wrap;overflow-wrap:anywhere">'
+                . htmlspecialchars($preview->body) . '</div></div>'));
         }
         $form->loadDataFrom([
             'Entries' => $chosen,
