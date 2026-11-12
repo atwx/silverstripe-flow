@@ -17,6 +17,11 @@ SilverStripe\Cli\Sake:
     'flow:import-config': Atwx\Flow\Cli\ImportConfigCommand
     'flow:export-config': Atwx\Flow\Cli\ExportConfigCommand
     'flow:cleanup-data': Atwx\Flow\Cli\CleanupDataCommand
+    'flow:followup-digest': Atwx\Flow\Cli\FollowUpDigestCommand
+
+SilverStripe\Security\Member:
+  extensions:
+    - Atwx\Flow\Extension\FlowMemberExtension
 
 ---
 Name: silverstripe-flow-routes

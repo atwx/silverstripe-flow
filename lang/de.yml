@@ -302,6 +302,15 @@ de:
     VIEW_OVERDUE: 'Überfällig'
     DONE: 'Als erledigt markieren'
     DONE_COUNT: '{count} Wiedervorlagen erledigt.'
+  Atwx\Flow\Service\FollowUpDigest:
+    SUBJECT: 'Fällige Wiedervorlagen ({count})'
+    GREETING: 'Guten Tag {name},'
+    INTRO: 'diese Wiedervorlagen sind fällig:'
+    OVERDUE: 'überfällig'
+    ALL: 'Alle Ihre Wiedervorlagen: {url}'
+    ALL_LINK: 'Alle Ihre Wiedervorlagen'
+  Atwx\Flow\Extension\FlowMemberExtension:
+    DIGEST_OFF: 'Keine tägliche Mail zu fälligen Wiedervorlagen'
   Atwx\Flow\Model\ChecklistItem:
     SINGULARNAME: 'Checklisten-Punkt'
     PLURALNAME: 'Checkliste'

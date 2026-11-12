@@ -304,6 +304,27 @@ SilverStripe\Control\Director:
 
 Creating and closing appear in the timeline; follow-ups are deleted with the case file.
 
+### Daily mail about due follow-ups
+
+`sake flow:followup-digest` sends every member one mail with their open
+follow-ups that are due today or overdue, each with a link to the case file,
+plus a link to the routed `FollowUpController` (view *Meine fälligen*). Run it
+once a day by cron:
+
+```
+0 7 * * *  cd /path/to/site && vendor/bin/sake flow:followup-digest
+```
+
+- Only follow-ups of case files whose list the member may view; follow-ups
+  without a member are left out.
+- At most one mail per member and day (`--force` sends again); `--dry-run`
+  only reports who would get one.
+- Members turn it off with *Keine tägliche Mail zu fälligen Wiedervorlagen*
+  (`Member.FlowDigestOff`, in the security admin).
+- Links are absolute: set `SS_BASE_URL` for the command line.
+- Sender as for mails (`MailService.from`); a failed mail is logged and
+  reported, the others are still sent.
+
 ## Checklists
 
 A workflow can have a checklist ("Unterlagen und Aufgaben"): every case file
