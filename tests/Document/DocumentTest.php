@@ -117,6 +117,26 @@ class DocumentTest extends SapphireTest
         $this->assertSame('Paläographie <I>', Placeholders::singleton()->replace('{{Title}}', $course, null, false));
     }
 
+    public function testPlaceholderDefaultsLinkAndDateTime(): void
+    {
+        $course = $this->course();
+        $course->Venue = '';
+        $placeholders = Placeholders::singleton();
+        $this->assertSame(
+            '- | Paläographie <I>',
+            $placeholders->replace('{{Venue|-}} | {{Title|-}}', $course, null, false)
+        );
+        $this->assertSame('unbekannt', $placeholders->replace('{{ Unknown | unbekannt }}', $course, null, false));
+        $this->assertStringEndsWith(
+            'test-courses/view/' . $course->ID,
+            $placeholders->replace('{{Link}}', $course, null, false)
+        );
+        $this->assertMatchesRegularExpression(
+            '/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/',
+            $placeholders->replace('{{Created}}', $course, null, false)
+        );
+    }
+
     public function testPlaceholdersDoNotCallMethods(): void
     {
         $course = $this->course();

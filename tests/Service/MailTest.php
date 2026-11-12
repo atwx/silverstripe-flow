@@ -319,6 +319,42 @@ class MailTest extends SapphireTest
         $this->assertNull($this->findEmail('ruth@example.org'));
     }
 
+    public function testNewCaseFileSendsTheMailsOfTheInitialStatus(): void
+    {
+        $workflowID = $this->template('closed')->WorkflowID;
+        $draft = Status::get()->filter(['Code' => 'draft', 'WorkflowID' => $workflowID])->first();
+        $this->assertNotNull($draft);
+        MailTemplate::create([
+            'WorkflowID' => $workflowID,
+            'Code' => 'new_course',
+            'Title' => 'Neuer Kurs',
+            'Subject' => 'Neuer Kurs: {{Title}}',
+            'Recipients' => 'office@example.org',
+            'Body' => "Ort: {{Venue|-}}\nEingang: {{Created}}\nAkte: {{Link}}",
+            'SendOnStatusID' => $draft->ID,
+        ])->write();
+
+        $course = TestCourse::create(['Title' => 'Siegelkunde']);
+        $course->write();
+
+        $email = $this->findEmail('office@example.org', null, 'Neuer Kurs: Siegelkunde');
+        $this->assertNotNull($email);
+        $this->assertStringContainsString('Ort: -', $email['Content']);
+        $this->assertMatchesRegularExpression('/Eingang: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}/', $email['Content']);
+        $this->assertStringContainsString('test-courses/view/' . $course->ID, $email['Content']);
+        $mail = CaseMail::get()->filter(['CaseID' => $course->ID, 'Subject' => 'Neuer Kurs: Siegelkunde'])->first();
+        $this->assertNotNull($mail);
+        $this->assertTrue((bool) $mail->Automatic);
+
+        // Not for case files created with an explicit status (imports, seeds) or when suppressed.
+        $this->clearEmails();
+        $this->course('draft');
+        MailService::withoutAutomaticMails(function () {
+            TestCourse::create(['Title' => 'Importiert'])->write();
+        });
+        $this->assertNull($this->findEmail('office@example.org'));
+    }
+
     public function testForEachMustBeAListOfTheCaseFile(): void
     {
         $template = $this->template('participants');
