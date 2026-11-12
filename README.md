@@ -611,7 +611,52 @@ entry's code. An inactive entry stays on the case files that have it, and so doe
 the filter on it. An entry stored on a case file counts as in use, so it cannot be
 deleted.
 
-## Extension points
+## JSON API
+
+A read-only JSON API serves other systems, such as a portal that runs as its
+own site. It does not use GraphQL, and the project lists exactly what goes
+out:
+
+```yaml
+Atwx\Flow\Api\ApiController:
+  token_env: [PORTAL_API_TOKEN]          # environment variables with valid tokens
+Atwx\Flow\Api\ApiResources:
+  resources:
+    family:
+      class: App\Models\Family
+      get: true                          # GET flow-api/family/<id>
+      fields:
+        id: ID
+        surname: Surname                 # database field
+        status: StatusTitle              # getter getStatusTitle(), only when listed
+        school: PlacementSchool.Name     # has_one path
+        image: { file: Image }           # URL of flow-api/file/family/<id>/image
+        children: { relation: Children, resource: child }
+        documents: { relation: Documents, resource: document, filter: { InPortal: 1 }, sort: 'Created DESC' }
+    schools:
+      class: App\Models\School
+      list: true                         # GET flow-api/schools?Active=1&limit=50&offset=0
+      filter: { Active: 1 }              # always applied
+      params: [Region]                   # filters the client may set
+      fields: { id: ID, name: Name }
+```
+
+- **Requests:** `GET flow-api/<resource>/<id>`, `GET flow-api/<resource>` and
+  `GET flow-api/file/<resource>/<id>/<field>`. A list answers
+  `{total, limit, offset, items}`; `limit` is at most 500
+  (`ApiController.max_limit`).
+- **Token:** header `Authorization: Bearer <token>` or `X-Api-Token: <token>`.
+  A wrong token answers 401. Without any token configured, the whole API
+  answers 404.
+- **What goes out:** only listed fields and resources. A resource without
+  `get` or `list` is only reachable nested inside another one, and an unknown
+  list parameter answers 400. That way a client cannot query other families
+  through lists.
+- **Values:** numbers and booleans as JSON types, dates as `YYYY-MM-DD`.
+  Getters are only called when they are listed, and nesting stops after
+  `ApiResources.max_depth` levels (default 6).
+
+
 
 | Hook | Where | Use |
 |---|---|---|
