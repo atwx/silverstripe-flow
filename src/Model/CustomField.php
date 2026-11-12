@@ -2,6 +2,8 @@
 
 namespace Atwx\Flow\Model;
 
+use Atwx\SilverstripeFrontdeskKit\Catalog\Catalogs;
+use Atwx\SilverstripeFrontdeskKit\Forms\SearchableDropdownField;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\DateField;
@@ -28,6 +30,7 @@ use SilverStripe\ORM\FieldType\DBField;
  * @property string $Title
  * @property string $Type
  * @property string $Options JSON object value => label (select)
+ * @property string $Catalog Catalog key of the frontdesk-kit catalogs (catalog)
  * @property bool $ShowInList
  * @property int $Sort
  * @property int $WorkflowID
@@ -41,15 +44,16 @@ class CustomField extends DataObject
 
     public const string PREFIX = 'Flow_';
 
-    public const array TYPES = ['text', 'textarea', 'date', 'checkbox', 'select'];
+    public const array TYPES = ['text', 'textarea', 'date', 'checkbox', 'select', 'catalog'];
 
     private static string $table_name = 'Flow_CustomField';
 
     private static array $db = [
         'Code' => 'Varchar(64)',
         'Title' => 'Varchar(255)',
-        'Type' => "Enum('text,textarea,date,checkbox,select', 'text')",
+        'Type' => "Enum('text,textarea,date,checkbox,select,catalog', 'text')",
         'Options' => 'Text',
+        'Catalog' => 'Varchar(64)',
         'ShowInList' => 'Boolean',
         'Sort' => 'Int',
     ];
@@ -85,6 +89,7 @@ class CustomField extends DataObject
             'date' => _t(self::class . '.TYPE_DATE', 'Date'),
             'checkbox' => _t(self::class . '.TYPE_CHECKBOX', 'Yes/No'),
             'select' => _t(self::class . '.TYPE_SELECT', 'Choice'),
+            'catalog' => _t(self::class . '.TYPE_CATALOG', 'Choice from a catalog'),
         ];
     }
 
@@ -114,6 +119,44 @@ class CustomField extends DataObject
         return $this;
     }
 
+    /**
+     * Labels of all values (for display, filters and exports): the options of a
+     * choice, all entries of a catalog (inactive ones too) by code.
+     *
+     * @return array<string, string> value => label
+     */
+    public function labels(): array
+    {
+        if ($this->Type !== 'catalog') {
+            return $this->optionMap();
+        }
+        $labels = [];
+        foreach (Catalogs::singleton()->all((string) $this->Catalog) as $entry) {
+            $labels[(string) $entry->Code] = $entry->getLabel();
+        }
+        return $labels;
+    }
+
+    /**
+     * Values that can be chosen: the options of a choice; the active entries of a
+     * catalog plus the current value (an inactive entry stays on the record).
+     *
+     * @return array<string, string> value => label
+     */
+    public function choices(mixed $current = null): array
+    {
+        if ($this->Type !== 'catalog') {
+            return $this->optionMap();
+        }
+        $choices = [];
+        foreach (Catalogs::singleton()->all((string) $this->Catalog) as $entry) {
+            if ($entry->Active || (string) $entry->Code === (string) $current) {
+                $choices[(string) $entry->Code] = $entry->getLabel();
+            }
+        }
+        return $choices;
+    }
+
     public function getTypeTitle(): string
     {
         return self::typeOptions()[$this->Type] ?? (string) $this->Type;
@@ -132,6 +175,9 @@ class CustomField extends DataObject
             'checkbox' => CheckboxField::create($name, $title),
             'select' => DropdownField::create($name, $title, $this->optionMap())
                 ->setEmptyString(_t(self::class . '.CHOOSE', '– choose –')),
+            'catalog' => SearchableDropdownField::create($name, $title, $this->choices($value))
+                ->setHasEmptyDefault(true)
+                ->setEmptyString(_t(self::class . '.CHOOSE', '– choose –')),
             default => TextField::create($name, $title),
         };
         $field->setValue($value);
@@ -146,6 +192,7 @@ class CustomField extends DataObject
         return match ($this->Type) {
             'checkbox' => (bool) $value,
             'select' => array_key_exists((string) $value, $this->optionMap()) ? (string) $value : null,
+            'catalog' => array_key_exists((string) $value, $this->labels()) ? (string) $value : null,
             'date' => $value ? (string) $value : null,
             default => trim((string) $value) === '' ? null : (string) $value,
         };
@@ -161,7 +208,7 @@ class CustomField extends DataObject
         }
         return match ($this->Type) {
             'checkbox' => $value ? _t(self::class . '.YES', 'Yes') : _t(self::class . '.NO', 'No'),
-            'select' => $this->optionMap()[(string) $value] ?? (string) $value,
+            'select', 'catalog' => $this->labels()[(string) $value] ?? (string) $value,
             'date' => self::niceDate((string) $value),
             default => (string) $value,
         };
@@ -184,6 +231,15 @@ class CustomField extends DataObject
             $this->fieldLabel('FieldGroup'),
             FieldGroup::get()->filter('WorkflowID', (int) $this->WorkflowID)->map('ID', 'Title')
         )->setEmptyString(_t(Workflow::class . '.CHOOSE_STATUS', '– choose –')));
+        $fields->replaceField('Catalog', DropdownField::create(
+            'Catalog',
+            $this->fieldLabel('Catalog'),
+            Catalogs::singleton()->titles()
+        )->setEmptyString(_t(Workflow::class . '.CHOOSE_STATUS', '– choose –'))
+            ->setDescription(_t(
+                self::class . '.CATALOG_DESCRIPTION',
+                'For "Choice from a catalog". The code of the entry is stored.'
+            )));
         $fields->addFieldToTab('Root.Main', TextareaField::create(
             'OptionLines',
             _t(self::class . '.OPTIONS', 'Options')
@@ -253,6 +309,9 @@ class CustomField extends DataObject
                 ConfigRecord::class . '.FOREIGN_RECORD',
                 'Please choose a record of the same workflow.'
             ));
+        }
+        if ($this->Type === 'catalog' && !Catalogs::singleton()->exists((string) $this->Catalog)) {
+            $result->addFieldError('Catalog', _t(self::class . '.CATALOG_REQUIRED', 'Please choose a catalog.'));
         }
         if ($this->Type === 'select' && $this->optionMap() === []) {
             $result->addFieldError('OptionLines', _t(self::class . '.OPTIONS_REQUIRED', 'Please enter the options.'));

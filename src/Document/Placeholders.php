@@ -144,7 +144,7 @@ class Placeholders
             return '';
         }
         $value = $case->flowValue($code);
-        $options = $custom->optionMap();
+        $options = $custom->labels();
         if ($custom->Type === 'checkbox') {
             return $value ? _t(self::class . '.YES', 'Yes') : _t(self::class . '.NO', 'No');
         }

@@ -15,9 +15,13 @@ use Atwx\Flow\Tests\Stubs\TestApplication;
 use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
 use Atwx\Flow\Ui\FlowFieldLayout;
+use Atwx\SilverstripeFrontdeskKit\Catalog\Catalogs;
+use Atwx\SilverstripeFrontdeskKit\Forms\SearchableDropdownField;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
 use SilverStripe\Dev\FunctionalTest;
+use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Group;
 use SilverStripe\Security\Member;
@@ -226,5 +230,69 @@ class CustomFieldTest extends FunctionalTest
 
         $this->assertSame(['audience' => 'beginners'], TestCourse::get()->byID($course->ID)?->flowData());
         $this->assertStringContainsString('removed', $output->fetch());
+    }
+
+    /**
+     * A custom field of type "catalog": entries of a frontdesk-kit catalog, stored
+     * by code; inactive entries stay on the case file; entries in use cannot be
+     * deleted.
+     */
+    public function testCatalogField(): void
+    {
+        i18n::set_locale('de_DE');
+        Catalogs::config()->set('catalogs', ['channels' => ['title' => 'Akquisekanal']]);
+        $entries = Catalogs::singleton()->sync('channels', [
+            'web' => 'Website',
+            'fair' => 'Messe',
+            'old' => 'Zeitung',
+        ]);
+        $group = FieldGroup::get()->filter(['Code' => 'announcement', 'WorkflowID' => $this->workflow()->ID])->first();
+        $this->assertNotNull($group);
+
+        $custom = CustomField::create([
+            'WorkflowID' => $this->workflow()->ID,
+            'FieldGroupID' => $group->ID,
+            'Code' => 'channel',
+            'Title' => 'Kanal',
+            'Type' => 'catalog',
+            'ShowInList' => true,
+        ]);
+        try {
+            $custom->write();
+            $this->fail('a catalog is required');
+        } catch (ValidationException $e) {
+            $this->assertNotSame('', $e->getMessage());
+        }
+        $custom->Catalog = 'channels';
+        $custom->write();
+
+        $entries['old']->Active = false;
+        $entries['old']->write();
+        $this->assertSame(['web' => 'Website', 'fair' => 'Messe'], $custom->choices());
+        $this->assertSame(
+            ['web' => 'Website', 'fair' => 'Messe', 'old' => 'Zeitung (inaktiv)'],
+            $custom->choices('old')
+        );
+        $this->assertSame('fair', $custom->normalise('fair'));
+        $this->assertNull($custom->normalise('nope'));
+        $this->assertSame('Zeitung (inaktiv)', $custom->display('old'));
+        $field = $custom->formField(null);
+        $this->assertInstanceOf(SearchableDropdownField::class, $field);
+        $this->assertSame(['web' => 'Website', 'fair' => 'Messe'], $field->getSource());
+
+        $this->logInTo('organisers');
+        $fair = $this->courseIn('draft', ['channel' => 'fair']);
+        $this->courseIn('draft', ['channel' => 'web']);
+        $controller = TestCourseController::create();
+        $request = new HTTPRequest('GET', 'test-courses', ['Flow_channel' => 'fair']);
+        $request->setSession(new Session([]));
+        $controller->setRequest($request);
+        $this->assertSame([$fair->ID], $controller->filteredIDs());
+
+        $this->assertTrue($entries['fair']->isInUse(), 'stored on a case file');
+        $this->assertFalse($entries['old']->isInUse());
+
+        $yaml = \Atwx\Flow\Config\ConfigExporter::create()->toYaml();
+        $this->assertStringContainsString('catalog: channels', $yaml);
     }
 }
