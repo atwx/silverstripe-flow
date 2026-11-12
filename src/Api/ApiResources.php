@@ -2,7 +2,7 @@
 
 namespace Atwx\Flow\Api;
 
-use SilverStripe\Assets\File;
+use Atwx\SilverstripeFrontdeskKit\Forms\RecordFiles;
 use SilverStripe\Assets\Storage\DBFile;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injectable;
@@ -156,8 +156,9 @@ class ApiResources
     {
         $schema = DataObject::getSchema();
         if ($schema->hasOneComponent($record::class, $field)) {
-            $file = $record->getComponent($field);
-            return $file instanceof File && $file->exists() && $file->File->exists() ? $file->File : null;
+            // Uploads through the kit stay unpublished: read the draft stage.
+            $file = RecordFiles::fileOf($record, $field);
+            return $file && $file->File->exists() ? $file->File : null;
         }
         if ($schema->fieldSpec($record::class, $field)) {
             $file = $record->dbObject($field);

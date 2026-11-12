@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Tests\Stubs;
 
 use Atwx\Flow\Extension\CommentsExtension;
+use SilverStripe\Assets\File;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
 
@@ -30,6 +31,7 @@ class TestParticipant extends DataObject implements TestOnly
 
     private static array $has_one = [
         'Course' => TestCourse::class,
+        'Photo' => File::class,
     ];
 
     public function getTitle(): string

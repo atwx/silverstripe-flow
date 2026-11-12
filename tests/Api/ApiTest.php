@@ -10,6 +10,7 @@ use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestParticipant;
+use SilverStripe\Assets\File;
 use SilverStripe\Assets\Dev\TestAssetStore;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPResponse;
@@ -59,7 +60,12 @@ class ApiTest extends SapphireTest
                 'class' => TestParticipant::class,
                 'list' => true,
                 'params' => ['CourseID'],
-                'fields' => ['name' => 'Name', 'course' => ['relation' => 'Course', 'resource' => 'courseref']],
+                'get' => true,
+                'fields' => [
+                    'name' => 'Name',
+                    'photo' => ['file' => 'Photo'],
+                    'course' => ['relation' => 'Course', 'resource' => 'courseref'],
+                ],
             ],
             'person' => [
                 'class' => TestParticipant::class,
@@ -171,5 +177,23 @@ class ApiTest extends SapphireTest
         TestParticipant::create(['Name' => 'Ruth', 'Email' => 'ruth2@example.org'])->write();
         $this->assertSame(404, $this->get('flow-api/person/Ruth')->getStatusCode(), 'ambiguous');
         $this->assertSame(404, $this->get('flow-api/course/abc')->getStatusCode(), 'ID must be numeric');
+    }
+
+    public function testUnpublishedFileOfAHasOne(): void
+    {
+        $photo = File::create();
+        $photo->setFromString('JPEGDATA', 'flow-api/ruth.jpg');
+        $photo->write();
+        $ruth = TestParticipant::get()->find('Name', 'Ruth');
+        $this->assertNotNull($ruth);
+        $ruth->PhotoID = $photo->ID;
+        $ruth->write();
+        $this->assertFalse($photo->isPublished());
+
+        $data = $this->json($this->get('flow-api/participant/' . $ruth->ID));
+        $this->assertStringEndsWith('flow-api/file/participant/' . $ruth->ID . '/photo', (string) $data['photo']);
+        $download = $this->get('flow-api/file/participant/' . $ruth->ID . '/photo');
+        $this->assertSame(200, $download->getStatusCode());
+        $this->assertSame('JPEGDATA', $download->getBody());
     }
 }
