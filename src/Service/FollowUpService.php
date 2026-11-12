@@ -19,12 +19,14 @@ class FollowUpService
 
     public function onStatusChange(DataObject $case, int $fromID, int $toID, ?Member $by): void
     {
+        // The follow-ups go where the comments of the case file are (Comment::recordFor()).
+        $record = Comment::recordFor($case);
         if ($fromID) {
             $leaving = FollowUpRule::get()->filter(['StatusID' => $fromID, 'CloseOnLeave' => true])->column('ID');
             if ($leaving) {
                 $open = Comment::get()->filter([
-                    'RecordClass' => $case->ClassName,
-                    'RecordID' => $case->ID,
+                    'RecordClass' => $record->ClassName,
+                    'RecordID' => $record->ID,
                     'RuleID' => $leaving,
                     'IsDone' => false,
                 ]);
@@ -41,8 +43,8 @@ class FollowUpService
                 : null;
             Comment::create([
                 'Kind' => Comment::FOLLOW_UP,
-                'RecordClass' => $case->ClassName,
-                'RecordID' => $case->ID,
+                'RecordClass' => $record->ClassName,
+                'RecordID' => $record->ID,
                 'RuleID' => $rule->ID,
                 'Text' => $rule->Title,
                 'DueDate' => date('Y-m-d', (int) strtotime('+' . max(0, (int) $rule->Days) . ' days')),

@@ -43,6 +43,7 @@ class CommentSubController extends FrontdeskSubController
         if (!$record) {
             return null;
         }
+        $record = Comment::recordFor($record);
         if ($parent->hasMethod('commentRecordFor')) {
             $record = $parent->commentRecordFor($record);
         }

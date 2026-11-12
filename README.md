@@ -317,9 +317,16 @@ App\Controllers\SchoolController:
     - Atwx\Flow\Extension\CommentsControllerExtension  # sub-list <segment>/comments/<ID>
 ```
 
-A controller can attach the comments to another record with a public method
-`commentRecordFor(DataObject $record): DataObject`. For example, a student
-record can show and add the comments of its child.
+A record can keep its comments on another record. For example, a student
+record can use the comments of its child. To do so, give the model a method
+`flowCommentRecord(): DataObject` (see `Comment::recordFor()`). The sub-list,
+the follow-ups that rules create and the timeline then all use that record.
+Its class needs `CommentsExtension`. A controller can also map the record with
+`commentRecordFor(DataObject $record): DataObject`, but that only changes its
+own sub-list.
+
+`Comment::ensureDefaultType()` creates the type *Memo* when the catalog is
+empty, e.g. after a seeder has emptied the catalogs.
 
 Follow-up rules create follow-ups when a case file enters a status:
 

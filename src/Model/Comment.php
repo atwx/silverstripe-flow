@@ -117,7 +117,39 @@ class Comment extends DataObject
     }
 
     /**
-     * Comments of a record.
+     * The record that holds the comments of a record: itself, or what its
+     * method flowCommentRecord() returns (e.g. the child of a student record).
+     * Used by the sub-list, follow-up rules and the timeline alike.
+     */
+    public static function recordFor(DataObject $record): DataObject
+    {
+        if ($record->hasMethod('flowCommentRecord')) {
+            $target = $record->flowCommentRecord();
+            if ($target instanceof DataObject && $target->exists()) {
+                return $target;
+            }
+        }
+        return $record;
+    }
+
+    /**
+     * Creates the comment type Memo as default when the catalog has no entries
+     * (also for seeders that empty the catalogs). Returns the default entry.
+     */
+    public static function ensureDefaultType(): ?CatalogEntry
+    {
+        $catalogs = Catalogs::singleton();
+        if (!$catalogs->exists(self::TYPE_CATALOG)) {
+            return null;
+        }
+        if (!$catalogs->all(self::TYPE_CATALOG)->exists()) {
+            $catalogs->sync(self::TYPE_CATALOG, ['memo' => ['Title' => 'Memo', 'IsDefault' => true]]);
+        }
+        return $catalogs->defaultEntry(self::TYPE_CATALOG);
+    }
+
+    /**
+     * Comments of a record (stored on the record itself; see recordFor()).
      *
      * @return DataList<Comment>
      */
@@ -274,7 +306,7 @@ class Comment extends DataObject
         parent::requireDefaultRecords();
         $catalogs = Catalogs::singleton();
         if ($catalogs->exists(self::TYPE_CATALOG) && !$catalogs->all(self::TYPE_CATALOG)->exists()) {
-            $catalogs->sync(self::TYPE_CATALOG, ['memo' => ['Title' => 'Memo', 'IsDefault' => true]]);
+            self::ensureDefaultType();
             DB::alteration_message('Created the comment type Memo', 'created');
         }
         $tables = DB::table_list();

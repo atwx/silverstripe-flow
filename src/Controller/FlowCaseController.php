@@ -666,7 +666,7 @@ abstract class FlowCaseController extends FrontdeskController
         foreach (StatusChange::get()->filter($case) as $change) {
             $entries->push($this->statusChangeEntry($change));
         }
-        $comments = Comment::get()->filter(['RecordClass' => $record->ClassName, 'RecordID' => $record->ID]);
+        $comments = Comment::forRecord(Comment::recordFor($record));
         foreach ($comments as $comment) {
             $creator = $comment->CreatedBy();
             $title = $comment->DueDate
