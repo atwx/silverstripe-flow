@@ -27,6 +27,13 @@ class MailDraft
 
     public string $subject = '';
 
+    /**
+     * Recipient expressions that gave no valid address (shown in the mail form).
+     *
+     * @var array<int, string>
+     */
+    public array $skipped = [];
+
     public string $body = '';
 
     /**

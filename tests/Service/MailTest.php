@@ -189,6 +189,17 @@ class MailTest extends SapphireTest
             )
         );
         $this->assertSame([['a@example.org'], ['x@']], $resolver->parseAddresses('a@example.org, x@'));
+
+        $resolver->resolve('Assignee.lead, Unknown.Field, a@example.org', $course, $this->olga, $skipped);
+        $this->assertSame(['Assignee.lead', 'Unknown.Field'], $skipped, 'parts without a valid address');
+        $admin = Member::create(['Email' => 'admin', 'FirstName' => 'Admin']);
+        $admin->write();
+        $admin->Groups()->add(Group::get()->find('Code', 'organisers'));
+        $lead = Responsibility::get()->find('Code', 'lead');
+        $this->assertNotNull($lead);
+        AssignmentService::singleton()->assign($course, $lead, $admin, $this->olga);
+        $draft = MailService::singleton()->draft($course, $this->template('confirmation'), $this->olga);
+        $this->assertSame(['Assignee.lead (admin)'], $draft->skipped);
     }
 
     public function testComposeNeedsTheEditPermissionAndRefusesInvalidAddresses(): void
