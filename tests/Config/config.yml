@@ -110,6 +110,20 @@ workflows:
       - code: certificate
         title: Teilnahmebescheinigungen
         file: required
+    mails:
+      - code: confirmation
+        title: 'Bestätigung senden'
+        subject: 'Bestätigung: {{Title}}'
+        to: 'Assignee.lead, info@example.org'
+        cc: Me
+        body: "Der Kurs {{Title}} hat den Status {{Status}}.\nBis bald!"
+        attach: [confirmation]
+      - code: closed
+        title: Abschlussmeldung
+        subject: 'Abgeschlossen: {{Title}}'
+        to: info@example.org
+        body: 'Der Kurs {{Title}} ist abgeschlossen.'
+        send_on: done
     permissions:
       - group: basics
         role: organisers

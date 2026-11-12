@@ -9,6 +9,7 @@ use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\Assignment;
 use Atwx\Flow\Model\AssignmentChange;
 use Atwx\Flow\Model\CaseDocument;
+use Atwx\Flow\Model\CaseMail;
 use Atwx\Flow\Model\ChecklistEntry;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\FollowUp;
@@ -49,6 +50,7 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<CaseDocument> FlowDocuments()
  * @method HasManyList<FollowUp> FlowFollowUps()
  * @method HasManyList<ChecklistEntry> FlowChecklist()
+ * @method HasManyList<CaseMail> FlowMails()
  * @extends Extension<DataObject&static>
  */
 class CaseFileExtension extends Extension
@@ -70,6 +72,7 @@ class CaseFileExtension extends Extension
         'FlowDocuments' => CaseDocument::class . '.Case',
         'FlowFollowUps' => FollowUp::class . '.Case',
         'FlowChecklist' => ChecklistEntry::class . '.Case',
+        'FlowMails' => CaseMail::class . '.Case',
     ];
 
     /**
@@ -84,6 +87,7 @@ class CaseFileExtension extends Extension
         'FlowDocuments',
         'FlowFollowUps',
         'FlowChecklist',
+        'FlowMails',
     ];
 
     /**

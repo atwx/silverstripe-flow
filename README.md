@@ -330,6 +330,67 @@ entry and the case file.
         file: required
 ```
 
+## Mails
+
+Mail templates belong to a workflow (CMS: workflow → *Mail templates*, or YAML).
+Each template has the following parts:
+
+- **Subject and body:** plain text with the placeholders of the document
+  templates.
+- **Recipients, Cc and Reply-To:** expressions, comma-separated. Possible tokens:
+  - addresses, e.g. `info@example.org`
+  - fields of the case file, also through has_one, has_many and many_many
+    relations, e.g. `Email`, `Contact.Email`, `Family.Parents.Email`
+  - `Assignee.<responsibility>`, the member assigned to that responsibility
+  - `Me`, the member who writes the mail
+
+  Invalid addresses are left out. A domain class can add tokens of its own with
+  `updateFlowMailRecipients(string $token, array &$addresses)`.
+- **Attachments:** codes of document templates. Their PDFs are created and
+  attached, and they are also kept as documents of the case file.
+- **Automatic sending:** `send_on` sends the mail when the case file enters that
+  status. The mail goes out after the status change, as the actor (the member, or
+  nobody for an edit link).
+
+```yaml
+    mails:
+      - code: confirmation
+        title: 'Bestätigung senden'
+        subject: 'Bestätigung: {{Title}}'
+        to: 'Contact.Email, Assignee.lead'
+        cc: Me
+        reply_to: Assignee.lead
+        body: "Guten Tag,\n\nder Kurs {{Title}} …"
+        attach: [confirmation]        # document templates
+      - code: closed
+        title: Abschlussmeldung
+        subject: 'Abgeschlossen: {{Title}}'
+        to: info@example.org
+        body: 'Der Kurs {{Title}} ist abgeschlossen.'
+        send_on: done                 # sent automatically
+```
+
+**Writing a mail from a case file:**
+
+1. The record action *Mail schreiben* lists the templates. It is offered to
+   members who may edit and have a role in the workflow.
+2. It opens the mail form `<segment>/mails/<ID>/compose`, filled from the
+   template. Recipients, subject, text and attachments can be changed there. As
+   attachments, the form offers new PDFs from document templates and the
+   existing documents of the case file.
+3. *Senden* sends the mail. *Im Mailprogramm öffnen* downloads it as an `.eml`
+   file with `X-Unsent: 1`, which Outlook and Thunderbird open as a draft.
+
+**Record of every mail:** each mail is kept as `CaseMail` with its full text.
+It appears in the sub-list *Mails* and in the timeline as sent, not sent or
+created for the mail program. A transport error never stops the work: the mail
+is recorded as *nicht gesendet* together with the error, and the error is
+logged.
+
+The transport is Silverstripe's mailer (Symfony Mailer, `MAILER_DSN`), so SMTP
+or another transport such as Microsoft Graph can be configured without code
+changes. The sender is `MailService.from` (default `Email.admin_email`).
+
 ## Edit links
 
 People without an account work on a case file through an edit link. Members who
