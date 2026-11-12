@@ -342,6 +342,7 @@ de:
     FAILED: 'Die Mail konnte nicht gesendet werden: {error}'
     INVALID_ADDRESS: 'Ungültige Adresse: {address}'
     NO_RECIPIENTS: 'Bitte mindestens einen Empfänger angeben.'
+    SKIPPED: 'Ohne gültige Adresse, ausgelassen: {list}'
   Atwx\Flow\Model\CaseMail:
     SINGULARNAME: 'Mail'
     PLURALNAME: 'Mails'

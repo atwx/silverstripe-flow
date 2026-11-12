@@ -29,23 +29,42 @@ class RecipientResolver
     use Injectable;
 
     /**
+     * @param array<int, string>|null $skipped Set to the parts that gave no valid
+     *   address (e.g. "Assignee.lead (admin)" or "Contact.Email"), to tell the member
      * @return array<int, string>
      */
-    public function resolve(string $expression, DataObject $case, ?Member $me): array
+    public function resolve(string $expression, DataObject $case, ?Member $me, ?array &$skipped = null): array
     {
         $addresses = [];
+        $skipped = [];
         foreach (preg_split('/[,;\n]+/', $expression) ?: [] as $token) {
             $token = trim(str_replace(['{{', '}}'], '', $token));
             if ($token === '') {
                 continue;
             }
             $found = $this->token($token, $case, $me);
-            $case->extend('updateFlowMailRecipients', $token, $found);
+            // extend() passes arguments by reference: keep the token itself unchanged.
+            $hookToken = $token;
+            $case->extend('updateFlowMailRecipients', $hookToken, $found);
+            $valid = 0;
+            $invalid = [];
             foreach ($found as $address) {
                 $address = strtolower(trim((string) $address));
-                if (filter_var($address, FILTER_VALIDATE_EMAIL) && !in_array($address, $addresses, true)) {
+                if (!filter_var($address, FILTER_VALIDATE_EMAIL)) {
+                    if ($address !== '') {
+                        $invalid[] = $address;
+                    }
+                    continue;
+                }
+                $valid++;
+                if (!in_array($address, $addresses, true)) {
                     $addresses[] = $address;
                 }
+            }
+            if ($invalid) {
+                $skipped[] = $token . ' (' . implode(', ', $invalid) . ')';
+            } elseif ($valid === 0) {
+                $skipped[] = $token;
             }
         }
         return $addresses;

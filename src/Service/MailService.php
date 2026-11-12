@@ -59,9 +59,14 @@ class MailService
         $placeholders = Placeholders::singleton();
         $draft = MailDraft::create();
         $draft->templateID = (int) $template->ID;
-        $draft->to = $resolver->resolve((string) $template->Recipients, $case, $me);
-        $draft->cc = $resolver->resolve((string) $template->Cc, $case, $me);
-        $draft->replyTo = $resolver->resolve((string) $template->ReplyTo, $case, $me)[0] ?? '';
+        $draft->to = $resolver->resolve((string) $template->Recipients, $case, $me, $skippedTo);
+        $draft->cc = $resolver->resolve((string) $template->Cc, $case, $me, $skippedCc);
+        $draft->replyTo = $resolver->resolve((string) $template->ReplyTo, $case, $me, $skippedReplyTo)[0] ?? '';
+        $draft->skipped = array_values(array_unique(array_merge(
+            (array) $skippedTo,
+            (array) $skippedCc,
+            (array) $skippedReplyTo
+        )));
         $draft->subject = trim($placeholders->replace((string) $template->Subject, $case, $me, false));
         $draft->body = $placeholders->replace((string) $template->Body, $case, $me, false);
         foreach ($template->attachmentTemplates() as $documentTemplate) {

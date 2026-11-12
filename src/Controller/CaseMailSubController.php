@@ -180,6 +180,14 @@ class CaseMailSubController extends FrontdeskSubController
 
         if ($case && $template && !$this->getRequest()->isPOST()) {
             $draft = MailService::singleton()->draft($case, $template, Security::getCurrentUser());
+            if ($draft->skipped) {
+                $fields->unshift(LiteralField::create('Skipped', '<div role="status" class="alert alert-warning mb-4">'
+                    . htmlspecialchars(_t(
+                        self::class . '.SKIPPED',
+                        'Without a valid address, left out: {list}',
+                        ['list' => implode(', ', $draft->skipped)]
+                    )) . '</div>'));
+            }
             $form->loadDataFrom([
                 'Recipients' => implode(', ', $draft->to),
                 'Cc' => implode(', ', $draft->cc),
