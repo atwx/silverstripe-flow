@@ -15,9 +15,11 @@ use SilverStripe\Core\Extension;
  *     extensions:
  *       - Atwx\Flow\Extension\CommentsControllerExtension
  *
- * A controller may attach the comments to another record than its own, e.g.
- * the child of a student record, with a public method
- * commentRecordFor(DataObject $record): DataObject.
+ * To keep the comments of a record on another one (e.g. those of a student
+ * record on its child), give the model a method flowCommentRecord(): DataObject
+ * (see Comment::recordFor()); then the sub-list, follow-up rules and the
+ * timeline agree. A controller may still map the record with a public method
+ * commentRecordFor(DataObject $record): DataObject, for its sub-list only.
  *
  * @extends Extension<FrontdeskController>
  */
