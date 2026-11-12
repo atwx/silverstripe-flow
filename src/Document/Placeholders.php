@@ -3,13 +3,16 @@
 namespace Atwx\Flow\Document;
 
 use Atwx\Flow\Extension\CaseFileExtension;
+use Atwx\Flow\Controller\FollowUpController;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Service\AssignmentService;
+use SilverStripe\Control\Director;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDate;
+use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\Security\Member;
 
@@ -28,7 +31,11 @@ use SilverStripe\Security\Member;
  *
  * - {{Item.Field}}, {{Item.Relation.Field}}: the sub-list entry of a mail per
  *   entry (MailTemplate.ForEach)
+ * - {{Link}}: absolute URL of the case file's view (through the routed case
+ *   controller; empty without one)
+ * - {{Field|-}}: a default after the bar, used when the value is empty
  *
+ * Date-and-time fields are formatted dd.mm.yyyy hh:mm.
  * Unknown placeholders become empty. Values are HTML-escaped unless $html is false.
  */
 class Placeholders
@@ -71,9 +78,12 @@ class Placeholders
     private function fill(string $text, DataObject $case, ?Member $me, bool $html, ?DataObject $item = null): string
     {
         return (string) preg_replace_callback(
-            '/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/',
+            '/\{\{\s*([A-Za-z0-9_.]+)\s*(?:\|([^}|]*))?\}\}/',
             function (array $match) use ($case, $me, $html, $item) {
                 $value = $this->value($match[1], $case, $me, $item);
+                if (trim($value) === '' && isset($match[2])) {
+                    $value = trim($match[2]);
+                }
                 return $html ? htmlspecialchars($value, ENT_QUOTES | ENT_HTML5) : $value;
             },
             $text
@@ -89,6 +99,12 @@ class Placeholders
                 return $item && $parts ? $this->resolve($item, $parts) : '';
             case 'Today':
                 return date('d.m.Y');
+            case 'Link':
+                // A field of the domain class named Link wins.
+                if (!$parts && !DataObject::getSchema()->fieldSpec($case::class, 'Link')) {
+                    return $this->link($case);
+                }
+                break;
             case 'Status':
                 $status = $case->hasExtension(CaseFileExtension::class) ? $case->getComponent('FlowStatus') : null;
                 return $status && $status->exists() ? (string) $status->getField('Title') : '';
@@ -124,6 +140,9 @@ class Placeholders
         }
         if ($schema->fieldSpec($record::class, $field)) {
             $object = $record->dbObject($field);
+            if ($object instanceof DBDatetime) {
+                return $object->getValue() ? (string) $object->Format('dd.MM.yyyy HH:mm') : '';
+            }
             if ($object instanceof DBDate) {
                 return $object->getValue() ? (string) $object->Format('dd.MM.yyyy') : '';
             }
@@ -139,6 +158,12 @@ class Placeholders
             return is_scalar($value) ? (string) $value : '';
         }
         return '';
+    }
+
+    private function link(DataObject $case): string
+    {
+        $controller = FollowUpController::caseControllerFor($case::class);
+        return $controller && $case->isInDB() ? Director::absoluteURL($controller->Link('view/' . $case->ID)) : '';
     }
 
     private function customField(DataObject $case, string $code): string

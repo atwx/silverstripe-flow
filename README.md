@@ -260,9 +260,12 @@ CMS (workflow → *Templates*) or in the configuration file:
 ```
 
 Placeholders: `{{Field}}`, `{{Relation.Field}}` (has_one chains, dates as
-dd.mm.yyyy, getters like `{{Child.Title}}`; no other methods), `{{Flow.<code>}}`
-(custom field), `{{Assignee.<code>}}` (responsibility), `{{Status}}`, `{{Today}}`,
-`{{Me.Name}}`. Values are HTML-escaped; unknown placeholders stay empty.
+dd.mm.yyyy, date and time as dd.mm.yyyy hh:mm, getters like `{{Child.Title}}`;
+no other methods), `{{Flow.<code>}}` (custom field), `{{Assignee.<code>}}`
+(responsibility), `{{Status}}`, `{{Today}}`, `{{Me.Name}}` and `{{Link}}` (the
+absolute address of the case file, through its routed controller). A default
+after a bar fills empty values: `{{Phone|-}}`. Values are HTML-escaped; unknown
+placeholders stay empty.
 
 `FlowCaseController` adds the record action *Create document* (members who may
 edit and have a role in the workflow), the sub-list *Documents* with download
@@ -373,6 +376,9 @@ Each template has the following parts:
 - **Automatic sending:** `send_on` sends the mail when the case file enters that
   status. The mail goes out after the status change, as the actor (the member, or
   nobody for an edit link).
+- **Notification about a new case file:** with `send_on` set to the initial
+  status, the mail is also sent when a case file is created, e.g. by a public
+  form (see below).
 
 ```yaml
     mails:
@@ -425,6 +431,28 @@ school of an application. `{{Item.<field>}}` in subject and body and
 - PDFs of document templates are created once and attached to every mail.
 - Each mail is recorded in the case file and refers to its entry
   (`CaseMail.Item`; `CaseMail::forItem($entry)` lists the mails of an entry).
+
+**Notification about a new case file:** a template with `send_on` on the
+initial status goes out when a record is created in it, from the frontdesk, a
+public form or code. Without recipients no mail is sent (the template cannot be
+saved without them).
+
+```yaml
+      - code: new_application
+        title: 'Neue Kurzbewerbung'
+        subject: 'Neue Kurzbewerbung: {{FirstName}} {{LastName}}'
+        to: 'office@example.org, Assignee.lead'
+        send_on: received             # the initial status
+        body: "Geburtsdatum: {{BirthDate|-}}\nTelefon: {{Phone|-}}\nEingang: {{Created}}\n\n{{Link}}"
+```
+
+- Records created with an explicit status (`CaseFileExtension::writeStatus()`,
+  as imports and seeds do) send nothing.
+- Imports that create records through the normal write run inside
+  `MailService::withoutAutomaticMails(fn () => …)`, which turns off all
+  automatic mails for that time.
+- The mail is sent right after the first write. Records of sub-lists that are
+  written afterwards are not in it yet.
 
 **Record of every mail:** each mail is kept as `CaseMail` with its full text.
 It appears in the sub-list *Mails* and in the timeline as sent, not sent or

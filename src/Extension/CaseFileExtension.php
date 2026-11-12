@@ -19,6 +19,7 @@ use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Transition;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Service\FieldAccess;
+use Atwx\Flow\Service\MailService;
 use Atwx\Flow\Service\TransitionException;
 use Atwx\Flow\Service\TransitionService;
 use SilverStripe\Core\Extension;
@@ -37,7 +38,8 @@ use SilverStripe\ORM\HasManyList;
  *
  * The status is only ever changed through {@see TransitionService}; writing
  * FlowStatusID directly is ignored. New records start in the workflow's
- * initial status.
+ * initial status; the automatic mails of that status are sent then (not for
+ * records created with an explicit status through writeStatus(), e.g. imports).
  *
  * @property int $FlowStatusID
  * @property string $FlowData JSON object of custom field values, keyed by code
@@ -102,6 +104,11 @@ class CaseFileExtension extends Extension
      * Whether the record was new before the current write.
      */
     private bool $wasNew = false;
+
+    /**
+     * Whether the record was created with an explicit status (writeStatus()).
+     */
+    private bool $createdWithStatus = false;
 
     /**
      * Write the record with the given status, bypassing the workflow rules.
@@ -279,6 +286,7 @@ class CaseFileExtension extends Extension
         $this->collectFlowValues();
 
         $authorised = isset(self::$authorisedWrites[spl_object_hash($owner)]);
+        $this->createdWithStatus = $this->wasNew && $authorised;
 
         if ($this->wasNew) {
             if ($authorised) {
@@ -303,12 +311,17 @@ class CaseFileExtension extends Extension
             $this->wasNew = false;
             $owner = $this->getOwner();
             if ($owner->getField('FlowStatusID')) {
-                TransitionService::singleton()->record(
+                $actor = MemberActor::current();
+                $change = TransitionService::singleton()->record(
                     $owner,
                     0,
                     (int) $owner->getField('FlowStatusID'),
-                    MemberActor::current()
+                    $actor
                 );
+                if (!$this->createdWithStatus) {
+                    // Automatic mails of the initial status; failures are recorded, never thrown.
+                    MailService::singleton()->onStatusChange($owner, $change, $actor?->flowMember());
+                }
             }
         }
     }

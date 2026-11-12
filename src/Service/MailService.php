@@ -40,6 +40,29 @@ class MailService
     private static ?string $from = null;
 
     /**
+     * Depth of withoutAutomaticMails() calls.
+     */
+    protected static int $suppressed = 0;
+
+    /**
+     * Runs the callback without automatic mails (status changes and new case
+     * files), e.g. for imports that create records through the normal write.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public static function withoutAutomaticMails(callable $callback): mixed
+    {
+        static::$suppressed++;
+        try {
+            return $callback();
+        } finally {
+            static::$suppressed--;
+        }
+    }
+
+    /**
      * Templates of the case file's workflow.
      *
      * @return array<int, MailTemplate>
@@ -189,12 +212,13 @@ class MailService
 
     /**
      * Automatic mails of templates sent when the case file enters a status
-     * (called after the status change is committed).
+     * (called after the status change is committed, and after a new case file
+     * is written in the initial status).
      */
     public function onStatusChange(DataObject $case, StatusChange $change, ?Member $by): void
     {
         $workflow = Workflow::forClass($case::class);
-        if (!$workflow || !$change->ToID) {
+        if (static::$suppressed > 0 || !$workflow || !$change->ToID) {
             return;
         }
         $templates = MailTemplate::get()->filter([

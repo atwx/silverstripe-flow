@@ -13,7 +13,9 @@ use SilverStripe\ORM\DataObject;
  * of the document templates ({{Title}}, {{Flow.code}}, {{Assignee.code}}, ...),
  * recipients as expressions (see RecipientResolver), PDFs of document templates
  * as attachments. Sent from the case file (with a preview to edit before sending)
- * or automatically when the case file enters a status (SendOnStatus).
+ * or automatically when the case file enters a status (SendOnStatus); with the
+ * initial status also when a case file is created (e.g. a notification about a
+ * new application from a public form, with {{Link}} to it).
  *
  * With ForEach (a has_many or many_many relation of the case file) one mail is
  * sent per entry of that sub-list: {{Item.<field>}} in the texts and
@@ -126,7 +128,8 @@ class MailTemplate extends DataObject
             ->setDescription(_t(
                 self::class . '.BODY_DESCRIPTION',
                 'Plain text with placeholders: {{Field}}, {{Relation.Field}}, {{Flow.<custom field>}}, '
-                . '{{Assignee.<responsibility>}}, {{Status}}, {{Today}}, {{Me.Name}}.'
+                . '{{Assignee.<responsibility>}}, {{Status}}, {{Today}}, {{Me.Name}}, {{Link}} (address of the '
+                . 'case file); {{Field|-}} gives "-" for empty values.'
             )));
         $fields->dataFieldByName('Subject')
             ?->setDescription(_t(self::class . '.SUBJECT_DESCRIPTION', 'With placeholders.'));
@@ -151,7 +154,12 @@ class MailTemplate extends DataObject
             'SendOnStatusID',
             $this->fieldLabel('SendOnStatus'),
             Status::get()->filter('WorkflowID', (int) $this->WorkflowID)->map('ID', 'Title')
-        )->setEmptyString(_t(self::class . '.SEND_MANUALLY', '– only from the case file –')));
+        )->setEmptyString(_t(self::class . '.SEND_MANUALLY', '– only from the case file –'))
+            ->setDescription(_t(
+                self::class . '.SEND_ON_DESCRIPTION',
+                'Sent when a case file enters this status; with the initial status also when a case file '
+                . 'is created. {{Link}} is the address of the case file.'
+            )));
         return $fields;
     }
 
