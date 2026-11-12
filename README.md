@@ -10,6 +10,7 @@ An extension turns any domain class into a case file with:
 - revocable edit links for external collaborators without an account (random token, stored as hash)
 - custom fields stored as JSON, usable in forms, lists, filters and exports
 - a timeline of notes, status changes and link accesses
+- comments, follow-ups and to-dos on any record, with lists per member
 - configuration as database records, importable/exportable as YAML
 
 ## Requirements
@@ -279,11 +280,48 @@ override it in the project for the letterhead. PDFs are made by the
 (headless Chrome; the HTML is printed from a temporary file, nothing is served
 through a URL).
 
-## Follow-ups
+## Comments, follow-ups and to-dos
 
-Follow-ups ("Wiedervorlagen") have a due date, a text and the member who takes
-care of them. They are added in the case file (sub-list *Wiedervorlagen*, also
-marked as done there) or created by rules when a case file enters a status:
+Comments (`Comment`) belong to any record: case files, but also persons,
+schools or anything else with a frontdesk controller. Each comment has:
+
+- **Kind:** *Memo*, *Wiedervorlage* (follow-up), *To-Do* or *Termin*
+  (appointment). The kind, not the type name, decides in which lists an entry
+  appears.
+- **Type:** an entry of the catalog `flow_comment_type` (*Kommentartypen*,
+  maintained under the catalogs; the default entry, *Memo* on a new
+  installation, is preset).
+- **Text:** up to 2000 characters (`Comment.max_length`).
+- **Date and time:** both optional.
+- **Responsible member:** optional.
+- **Marks:** *Wichtig* (important) and *Erledigt* (done).
+- **Author:** the author stays when someone else edits the comment
+  (`CreatedBy`, `LastEditedBy`).
+
+The sub-list *Kommentare* shows entries with a date from today on first (by
+date), then the important ones, then the rest (latest change first). Entries
+that are no memos show the kind and the member responsible in front of the
+text: *Wiedervorlage (Anna): Schule anrufen*. Follow-ups and to-dos are marked
+as done instead of deleted. Creating and closing appear in the timeline of a
+case file, and comments are deleted with their record.
+
+Every `FlowCaseController` has the sub-list. Other records get it in two
+lines:
+
+```yaml
+App\Models\School:
+  extensions:
+    - Atwx\Flow\Extension\CommentsExtension          # comments, deleted with the record
+App\Controllers\SchoolController:
+  extensions:
+    - Atwx\Flow\Extension\CommentsControllerExtension  # sub-list <segment>/comments/<ID>
+```
+
+A controller can attach the comments to another record with a public method
+`commentRecordFor(DataObject $record): DataObject`. For example, a student
+record can show and add the comments of its child.
+
+Follow-up rules create follow-ups when a case file enters a status:
 
 ```yaml
     follow_ups:
@@ -295,9 +333,8 @@ marked as done there) or created by rules when a case file enters a status:
         close_on_leave: true         # default: closed when the status is left
 ```
 
-`FollowUpController` lists the open follow-ups of all case files whose list the
-member may view (views *Meine fälligen*, *Meine*, *Überfällig*; bulk action
-*Als erledigt markieren*); route it in the project:
+`FollowUpController` lists the open follow-ups and to-dos of all records whose
+list the member may view. Route it in the project:
 
 ```yaml
 SilverStripe\Control\Director:
@@ -305,12 +342,28 @@ SilverStripe\Control\Director:
     'followups//$Action/$ID/$OtherID': Atwx\Flow\Controller\FollowUpController
 ```
 
-Creating and closing appear in the timeline; follow-ups are deleted with the case file.
+- **Views:** *Meine fälligen*, *Meine Wiedervorlagen*, *Meine To-Dos*,
+  *To-Do-Korb* (to-dos without anyone responsible) and *Überfällig*.
+- **Filters:** by kind and by member.
+- **Bulk actions:** *Als erledigt markieren* and *Übernehmen* (enters the
+  member as responsible).
+
+**Upgrading from follow-ups:** follow-ups of earlier versions (`FollowUp`,
+table `Flow_FollowUp`) become comments of kind follow-up on `sake db:build`.
+The old table is renamed to `_obsolete_Flow_FollowUp`. In code:
+
+- `FollowUp` becomes `Comment` with `Kind` `followup`.
+- `CaseClass` and `CaseID` become `RecordClass` and `RecordID`.
+- `FlowFollowUps()` becomes `FlowComments()`.
+- `FollowUpSubController` becomes `CommentSubController`, segment `comments`
+  instead of `followups`.
+
+`Note` stays the unchangeable note in the timeline of a case file.
 
 ### Daily mail about due follow-ups
 
 `sake flow:followup-digest` sends every member one mail with their open
-follow-ups that are due today or overdue, each with a link to the case file,
+follow-ups and to-dos that are due today or overdue, each with a link to the record,
 plus a link to the routed `FollowUpController` (view *Meine fälligen*). Run it
 once a day by cron:
 
@@ -318,8 +371,8 @@ once a day by cron:
 0 7 * * *  cd /path/to/site && vendor/bin/sake flow:followup-digest
 ```
 
-- Only follow-ups of case files whose list the member may view; follow-ups
-  without a member are left out.
+- Only entries of records whose list the member may view; entries without a
+  member are left out.
 - At most one mail per member and day (`--force` sends again); `--dry-run`
   only reports who would get one.
 - Members turn it off with *Keine tägliche Mail zu fälligen Wiedervorlagen*

@@ -5,9 +5,9 @@ namespace Atwx\Flow\Tests\Service;
 use Atwx\Flow\Actor\MemberActor;
 use Atwx\Flow\Config\ConfigImporter;
 use Atwx\Flow\Controller\FollowUpController;
-use Atwx\Flow\Controller\FollowUpSubController;
+use Atwx\Flow\Controller\CommentSubController;
 use Atwx\Flow\Extension\CaseFileExtension;
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Service\AssignmentService;
@@ -77,7 +77,7 @@ class FollowUpTest extends SapphireTest
         $this->assertNotNull($actor);
         TransitionService::singleton()->transition($course, 'with_speaker', $actor);
 
-        $followUp = FollowUp::get()->filter(['CaseClass' => TestCourse::class, 'CaseID' => $course->ID])->first();
+        $followUp = Comment::get()->filter(['RecordClass' => TestCourse::class, 'RecordID' => $course->ID])->first();
         $this->assertNotNull($followUp);
         $this->assertSame('Referent:in nachfassen', $followUp->Text);
         $this->assertSame(date('Y-m-d', (int) strtotime('+7 days')), $followUp->DueDate);
@@ -89,51 +89,51 @@ class FollowUpTest extends SapphireTest
             $this->statusID('review'),
             null
         );
-        $closed = FollowUp::get()->byID($followUp->ID);
+        $closed = Comment::get()->byID($followUp->ID);
         $this->assertNotNull($closed);
         $this->assertTrue((bool) $closed->IsDone, 'closed when the status is left');
         $this->assertNotNull($closed->DoneAt);
 
         $titles = TestCourseController::create()->timeline($course)?->column('Title') ?? [];
-        $this->assertContains('Wiedervorlage erledigt: Referent:in nachfassen', $titles);
+        $this->assertContains('Erledigt: Referent:in nachfassen', $titles);
     }
 
     public function testManualFollowUpGetsTheCaseClass(): void
     {
         $course = $this->course();
         $parent = TestCourseController::create();
-        $request = new HTTPRequest('POST', 'test-courses/followups/' . $course->ID . '/save');
+        $request = new HTTPRequest('POST', 'test-courses/comments/' . $course->ID . '/save');
         $request->setSession(new Session([]));
         $parent->setRequest($request);
-        $sub = FollowUpSubController::create()->setParentContext($parent, (int) $course->ID);
+        $sub = CommentSubController::create()->setParentContext($parent, (int) $course->ID);
         $sub->setRequest($request);
 
         $form = $sub->EditForm();
-        $data = ['DueDate' => '2030-01-15', 'Text' => 'Anrufen', 'MemberID' => $this->olga->ID];
+        $data = ['Kind' => 'followup', 'DueDate' => '2030-01-15', 'Text' => 'Anrufen', 'MemberID' => $this->olga->ID];
         $form->loadDataFrom($data);
         $sub->save($data, $form);
 
-        $followUp = FollowUp::get()->find('Text', 'Anrufen');
+        $followUp = Comment::get()->find('Text', 'Anrufen');
         $this->assertNotNull($followUp);
-        $this->assertSame(TestCourse::class, $followUp->CaseClass);
-        $this->assertSame((int) $course->ID, (int) $followUp->CaseID);
+        $this->assertSame(TestCourse::class, $followUp->RecordClass);
+        $this->assertSame((int) $course->ID, (int) $followUp->RecordID);
         $this->assertSame((int) $this->olga->ID, (int) $followUp->CreatedByID);
     }
 
     public function testOverviewListsOpenFollowUpsWithLinkToTheCaseFile(): void
     {
         $course = $this->course();
-        $due = FollowUp::create([
-            'CaseClass' => TestCourse::class, 'CaseID' => $course->ID,
+        $due = Comment::create([
+            'Kind' => Comment::FOLLOW_UP, 'RecordClass' => TestCourse::class, 'RecordID' => $course->ID,
             'Text' => 'fällig', 'DueDate' => date('Y-m-d'), 'MemberID' => $this->olga->ID,
         ]);
         $due->write();
-        FollowUp::create([
-            'CaseClass' => TestCourse::class, 'CaseID' => $course->ID,
+        Comment::create([
+            'Kind' => Comment::FOLLOW_UP, 'RecordClass' => TestCourse::class, 'RecordID' => $course->ID,
             'Text' => 'später', 'DueDate' => '2099-01-01', 'MemberID' => $this->olga->ID,
         ])->write();
-        FollowUp::create([
-            'CaseClass' => TestCourse::class, 'CaseID' => $course->ID,
+        Comment::create([
+            'Kind' => Comment::FOLLOW_UP, 'RecordClass' => TestCourse::class, 'RecordID' => $course->ID,
             'Text' => 'erledigt', 'DueDate' => '2020-01-01', 'IsDone' => true,
         ])->write();
 
@@ -143,7 +143,7 @@ class FollowUpTest extends SapphireTest
         $controller = $this->overview([]);
         $html = '';
         foreach ($controller->Columns() as $column) {
-            if ($column->getName() === 'CaseTitle') {
+            if ($column->getName() === 'RecordTitle') {
                 $html = (string) $column->renderValue($due);
             }
         }
@@ -153,9 +153,9 @@ class FollowUpTest extends SapphireTest
     public function testFollowUpsGoWithTheCaseFile(): void
     {
         $course = $this->course();
-        FollowUp::create(['CaseClass' => TestCourse::class, 'CaseID' => $course->ID, 'Text' => 'x'])->write();
+        Comment::create(['RecordClass' => TestCourse::class, 'RecordID' => $course->ID, 'Text' => 'x'])->write();
         $course->delete();
-        $this->assertSame(0, FollowUp::get()->count());
+        $this->assertSame(0, Comment::get()->count());
     }
 
     /**
