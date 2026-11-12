@@ -26,6 +26,7 @@ use SilverStripe\ORM\FieldType\DBTime;
  *       family:
  *         class: App\Models\Family
  *         get: true                      # GET flow-api/family/<id>
+ *         key: Number                    # optional: GET flow-api/family/<Number> instead
  *         fields:
  *           id: ID
  *           surname: Surname             # database field
@@ -86,6 +87,30 @@ class ApiResources
         $list = DataList::create((string) $definition['class']);
         $filter = (array) ($definition['filter'] ?? []);
         return $filter ? $list->filter($filter) : $list;
+    }
+
+    /**
+     * The record of a resource for GET <resource>/<value>: found by ID, or by
+     * the resource's `key` field if it has one. Null unless exactly one
+     * record matches.
+     *
+     * @param array<string, mixed> $definition
+     */
+    public function findOne(array $definition, string $value): ?DataObject
+    {
+        if ($value === '') {
+            return null;
+        }
+        $list = $this->baseList($definition);
+        $key = (string) ($definition['key'] ?? '');
+        if ($key === '' || $key === 'ID') {
+            return ctype_digit($value) ? $list->byID((int) $value) : null;
+        }
+        if (!DataObject::getSchema()->fieldSpec((string) $definition['class'], $key)) {
+            return null;
+        }
+        $matches = $list->filter($key . ':ExactMatch:case', $value)->limit(2)->toArray();
+        return count($matches) === 1 ? $matches[0] : null;
     }
 
     /**

@@ -15,7 +15,8 @@ use SilverStripe\ORM\DataObject;
 /**
  * Read-only JSON API for other systems (e.g. a portal), without GraphQL:
  *
- *   GET flow-api/<resource>/<id>             one record (resources with get: true)
+ *   GET flow-api/<resource>/<id>             one record (resources with get: true;
+ *                                            with key: <field>, by that field)
  *   GET flow-api/<resource>?<param>=…        list (list: true; limit, offset)
  *   GET flow-api/file/<resource>/<id>/<key>  a file field of a record
  *
@@ -57,13 +58,13 @@ class ApiController extends Controller
         $resources = ApiResources::singleton();
         $name = (string) $request->param('Resource');
         $definition = $resources->definition($name);
-        $id = (int) $request->param('ID');
+        $id = (string) $request->param('ID');
         if (!$definition) {
             return $this->error(404, 'Unknown resource');
         }
         $list = $resources->baseList($definition);
-        if ($id) {
-            $record = empty($definition['get']) ? null : $list->byID($id);
+        if ($id !== '') {
+            $record = empty($definition['get']) ? null : $resources->findOne($definition, $id);
             if (!$record instanceof DataObject) {
                 return $this->error(404, 'Not found');
             }
