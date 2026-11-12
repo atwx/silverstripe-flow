@@ -32,7 +32,8 @@ use SilverStripe\Security\Security;
  * Mails of a case file: the list (sent, failed, mail files) with the full text,
  * and the mail form (compose/<case ID>?template=<ID>): recipients, subject, text
  * and attachments from the template, editable before sending or downloading as
- * a mail file.
+ * a mail file. A template with ForEach sends one mail per chosen entry of the
+ * sub-list; the texts keep their placeholders and are filled per entry.
  */
 class CaseMailSubController extends FrontdeskSubController
 {
@@ -89,10 +90,14 @@ class CaseMailSubController extends FrontdeskSubController
     protected function defineColumns(): ColumnCollection
     {
         $labels = CaseMail::singleton()->fieldLabels();
-        return ColumnCollection::create()
+        $columns = ColumnCollection::create()
             ->make('Created.Nice', $labels['Created.Nice'])->link('view/{ID}')->end()
             ->make('Subject', $labels['Subject'])->link('view/{ID}')->end()
-            ->make('Recipients', $labels['Recipients'])->end()
+            ->make('Recipients', $labels['Recipients'])->end();
+        if ($this->getBaseQuery()->filter('ItemID:GreaterThan', 0)->exists()) {
+            $columns->make('ItemTitle', $labels['ItemTitle'])->end();
+        }
+        return $columns
             ->make('ModeLabel', $labels['ModeLabel'])
                 ->format(fn ($value, DataObject $record) => $this->modeBadge($record))
                 ->type('html')
@@ -156,9 +161,12 @@ class CaseMailSubController extends FrontdeskSubController
         }
 
         $hint = _t(self::class . '.ADDRESS_HINT', 'Several addresses separated by commas.');
+        $forEach = $case && $template && $template->forEachRelation() !== null;
         $fields = FieldList::create(
             HiddenField::create('TemplateID', 'TemplateID', (int) $template?->ID),
-            TextField::create('Recipients', $labels['Recipients'])->setDescription($hint),
+            $case && $template && $template->forEachRelation() !== null
+                ? $this->entriesField($case, $template)
+                : TextField::create('Recipients', $labels['Recipients'])->setDescription($hint),
             TextField::create('Cc', $labels['Cc']),
             TextField::create('ReplyTo', $labels['ReplyTo']),
             TextField::create('Subject', $labels['Subject']),
@@ -167,18 +175,22 @@ class CaseMailSubController extends FrontdeskSubController
         if ($attachments) {
             $fields->push(CheckboxSetField::create('Attachments', $labels['AttachmentNames'], $attachments));
         }
-        $form = Form::create($this, 'MailForm', $fields, FieldList::create(
-            FormAction::create('doSend', _t(self::class . '.SEND', 'Send')),
-            FormAction::create('doEml', _t(self::class . '.EML', 'Open in mail program'))->addExtraClass('btn-ghost'),
-            LiteralField::create(
-                'Cancel',
-                '<a href="' . htmlspecialchars($this->caseLink(), ENT_QUOTES) . '" class="btn">'
-                . _t(self::class . '.CANCEL', 'Cancel') . '</a>'
-            )
+        $actions = FieldList::create(FormAction::create('doSend', _t(self::class . '.SEND', 'Send')));
+        if (!$forEach) {
+            $eml = FormAction::create('doEml', _t(self::class . '.EML', 'Open in mail program'));
+            $actions->push($eml->addExtraClass('btn-ghost'));
+        }
+        $actions->push(LiteralField::create(
+            'Cancel',
+            '<a href="' . htmlspecialchars($this->caseLink(), ENT_QUOTES) . '" class="btn">'
+            . _t(self::class . '.CANCEL', 'Cancel') . '</a>'
         ));
+        $form = Form::create($this, 'MailForm', $fields, $actions);
         $form->setValidationResponseCallback(fn (ValidationResult $result) => $this->redirectBack());
 
-        if ($case && $template && !$this->getRequest()->isPOST()) {
+        if ($case && $template && $template->forEachRelation() !== null && !$this->getRequest()->isPOST()) {
+            $this->loadForEach($form, $case, $template);
+        } elseif ($case && $template && !$this->getRequest()->isPOST()) {
             $draft = MailService::singleton()->draft($case, $template, Security::getCurrentUser());
             if ($draft->skipped) {
                 $fields->unshift(LiteralField::create('Skipped', '<div role="status" class="alert alert-warning mb-4">'
@@ -201,11 +213,86 @@ class CaseMailSubController extends FrontdeskSubController
     }
 
     /**
+     * Choice of the entries that get a mail, each with its recipients; entries
+     * without a valid address cannot be chosen.
+     */
+    private function entriesField(DataObject $case, MailTemplate $template): CheckboxSetField
+    {
+        $options = [];
+        $disabled = [];
+        $service = MailService::singleton();
+        $me = Security::getCurrentUser();
+        foreach ($service->entries($case, $template) as $item) {
+            $to = $service->draft($case, $template, $me, $item)->to;
+            $label = (string) $item->getTitle() . ': ' . ($to ? implode(', ', $to) : _t(
+                self::class . '.NO_ADDRESS',
+                'no valid address'
+            ));
+            $options[(int) $item->ID] = $label;
+            if (!$to) {
+                $disabled[] = (int) $item->ID;
+            }
+        }
+        $field = CheckboxSetField::create('Entries', _t(self::class . '.ENTRIES', 'One mail each to'), $options)
+            ->setDisabledItems($disabled);
+        if (!$options) {
+            $field->setDescription(_t(self::class . '.NO_ENTRIES', 'The list is empty.'));
+        }
+        return $field;
+    }
+
+    /**
+     * Mail per entry: texts with their placeholders (filled per entry when
+     * sending), all entries with an address chosen, a preview of the first one.
+     */
+    private function loadForEach(Form $form, DataObject $case, MailTemplate $template): void
+    {
+        $service = MailService::singleton();
+        $me = Security::getCurrentUser();
+        $base = $service->draft($case, $template, $me);
+        $chosen = [];
+        $preview = null;
+        foreach ($service->entries($case, $template) as $item) {
+            $draft = $service->draft($case, $template, $me, $item);
+            if ($draft->to) {
+                $chosen[] = (int) $item->ID;
+                $preview ??= $draft;
+            }
+        }
+        $fields = $form->Fields();
+        $fields->dataFieldByName('Body')?->setDescription(_t(
+            self::class . '.FOR_EACH_HINT',
+            'Placeholders are filled per entry when sending, {{Item.…}} with the entry.'
+        ));
+        if ($preview) {
+            $fields->insertAfter('Body', LiteralField::create('Preview', '<div class="fdk-mail-preview mb-4">'
+                . '<p class="font-semibold">' . htmlspecialchars(_t(
+                    self::class . '.PREVIEW',
+                    'Preview for {entry}',
+                    ['entry' => (string) $preview->item?->getTitle()]
+                )) . '</p><p>' . htmlspecialchars($preview->subject) . '</p>'
+                . '<pre class="whitespace-pre-wrap">' . htmlspecialchars($preview->body) . '</pre></div>'));
+        }
+        $form->loadDataFrom([
+            'Entries' => $chosen,
+            'Cc' => implode(', ', $base->cc),
+            'ReplyTo' => $base->replyTo,
+            'Subject' => (string) $template->Subject,
+            'Body' => (string) $template->Body,
+            'Attachments' => array_map(fn ($id) => 'tpl-' . $id, $base->documentTemplateIDs),
+        ]);
+    }
+
+    /**
      * @param array<string, mixed> $data
      */
     public function doSend(array $data, Form $form): HTTPResponse
     {
         $case = $this->caseFile();
+        $template = $this->requestedTemplate();
+        if ($case && $template && $template->forEachRelation() !== null) {
+            return $this->sendEach($case, $template, $data, $form);
+        }
         $draft = $case ? $this->draftFrom($data, $form) : null;
         if (!$case || !$draft) {
             return $this->redirectBack();
@@ -224,11 +311,55 @@ class CaseMailSubController extends FrontdeskSubController
     }
 
     /**
+     * One mail per chosen entry (only entries of the case file's list).
+     *
+     * @param array<string, mixed> $data
+     */
+    private function sendEach(DataObject $case, MailTemplate $template, array $data, Form $form): HTTPResponse
+    {
+        $chosen = array_map('intval', (array) ($data['Entries'] ?? []));
+        $entries = array_values(array_filter(
+            MailService::singleton()->entries($case, $template),
+            fn (DataObject $item) => in_array((int) $item->ID, $chosen, true)
+        ));
+        $draft = $this->draftFrom($data, $form, false);
+        if ($draft && !$entries) {
+            $message = _t(self::class . '.NO_ENTRY_CHOSEN', 'Please choose at least one entry.');
+            $form->sessionMessage($message, 'bad');
+            $form->setSessionData($data);
+            $draft = null;
+        }
+        if (!$draft) {
+            return $this->redirectBack();
+        }
+        $mails = MailService::singleton()->sendEach($case, $template, $entries, Security::getCurrentUser(), $draft);
+        $failed = array_filter($mails, fn (CaseMail $mail) => $mail->Mode !== CaseMail::SENT);
+        if ($failed) {
+            $this->flash(_t(
+                self::class . '.SENT_EACH_FAILED',
+                '{sent} of {count} mails sent; not sent: {failed}',
+                [
+                    'sent' => count($mails) - count($failed),
+                    'count' => count($mails),
+                    'failed' => implode(', ', array_map(fn (CaseMail $mail) => $mail->getItemTitle(), $failed)),
+                ]
+            ), 'error');
+        } else {
+            $this->flash(_t(self::class . '.SENT_EACH', '{count} mails sent.', ['count' => count($mails)]));
+        }
+        return $this->redirect($this->caseLink());
+    }
+
+    /**
      * @param array<string, mixed> $data
      */
     public function doEml(array $data, Form $form): HTTPResponse
     {
         $case = $this->caseFile();
+        $template = $this->requestedTemplate();
+        if ($template && $template->forEachRelation() !== null) {
+            return $this->redirectBack();
+        }
         $draft = $case ? $this->draftFrom($data, $form) : null;
         if (!$case || !$draft) {
             return $this->redirectBack();
@@ -246,8 +377,9 @@ class CaseMailSubController extends FrontdeskSubController
      * Draft from the submitted form; invalid addresses refuse the form.
      *
      * @param array<string, mixed> $data
+     * @param bool $needsRecipients False for mails per entry (recipients per entry)
      */
-    private function draftFrom(array $data, Form $form): ?MailDraft
+    private function draftFrom(array $data, Form $form, bool $needsRecipients = true): ?MailDraft
     {
         $resolver = RecipientResolver::singleton();
         $draft = MailDraft::create();
@@ -265,7 +397,7 @@ class CaseMailSubController extends FrontdeskSubController
             }
             $draft->$property = $property === 'replyTo' ? ($valid[0] ?? '') : $valid;
         }
-        if (!$draft->to) {
+        if ($needsRecipients && !$draft->to) {
             $errors['Recipients'] = _t(self::class . '.NO_RECIPIENTS', 'Please enter at least one recipient.');
         }
         $draft->subject = trim((string) ($data['Subject'] ?? ''));

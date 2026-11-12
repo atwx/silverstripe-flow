@@ -338,6 +338,14 @@ de:
     FILE_MISSING: 'fehlt'
     TITLE: 'Checkliste'
   Atwx\Flow\Controller\CaseMailSubController:
+    ENTRIES: 'Je eine Mail an'
+    NO_ADDRESS: 'keine gültige Adresse'
+    NO_ENTRIES: 'Die Liste ist leer.'
+    FOR_EACH_HINT: 'Platzhalter werden beim Senden je Eintrag gefüllt, {{Item.…}} mit dem Eintrag.'
+    PREVIEW: 'Vorschau für {entry}'
+    NO_ENTRY_CHOSEN: 'Bitte mindestens einen Eintrag wählen.'
+    SENT_EACH: '{count} Mails gesendet.'
+    SENT_EACH_FAILED: '{sent} von {count} Mails gesendet; nicht gesendet: {failed}'
     TITLE: 'Mails'
     VIEW: 'Ansehen'
     COMPOSE: 'Mail schreiben'
@@ -353,6 +361,7 @@ de:
     NO_RECIPIENTS: 'Bitte mindestens einen Empfänger angeben.'
     SKIPPED: 'Ohne gültige Adresse, ausgelassen: {list}'
   Atwx\Flow\Model\CaseMail:
+    has_one_Item: 'Eintrag'
     SINGULARNAME: 'Mail'
     PLURALNAME: 'Mails'
     MODE_SENT: 'gesendet'
@@ -371,6 +380,9 @@ de:
     db_Automatic: 'Automatisch'
     has_one_Member: 'Von'
   Atwx\Flow\Model\MailTemplate:
+    db_ForEach: 'Eine Mail je Eintrag von'
+    FOR_EACH_DESCRIPTION: 'Optional: eine Unterliste der Akte (Name der Relation, z. B. Registrations). Je Eintrag wird eine Mail gesendet; {{Item.Feld}} und Item.Email (Empfänger) beziehen sich auf den Eintrag.'
+    FOR_EACH_UNKNOWN: '„{relation}“ ist keine Liste der Akte.'
     SINGULARNAME: 'Mailvorlage'
     PLURALNAME: 'Mailvorlagen'
     db_Code: 'Code'

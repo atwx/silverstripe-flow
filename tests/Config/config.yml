@@ -124,6 +124,13 @@ workflows:
         to: info@example.org
         body: 'Der Kurs {{Title}} ist abgeschlossen.'
         send_on: done
+      - code: participants
+        title: 'Info an Teilnehmende'
+        subject: '{{Title}}: Info für {{Item.Name}}'
+        for_each: Participants
+        to: Item.Email
+        cc: Me
+        body: "Hallo {{Item.Name}},\nder Kurs {{Title}} findet in {{Venue}} statt."
     permissions:
       - group: basics
         role: organisers

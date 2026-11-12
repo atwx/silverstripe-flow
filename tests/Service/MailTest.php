@@ -22,6 +22,7 @@ use Atwx\Flow\Tests\Stubs\FakePdfRenderer;
 use Atwx\Flow\Tests\Stubs\TestApplication;
 use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
+use Atwx\Flow\Tests\Stubs\TestParticipant;
 use SilverStripe\Assets\Dev\TestAssetStore;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
@@ -47,6 +48,7 @@ class MailTest extends SapphireTest
     protected static $extra_dataobjects = [
         TestCourse::class,
         TestApplication::class,
+        TestParticipant::class,
     ];
 
     private Member $olga;
@@ -245,5 +247,84 @@ class MailTest extends SapphireTest
         $sub = CaseMailSubController::create()->setParentContext($parent, (int) $course->ID);
         $sub->setRequest($request);
         return $sub;
+    }
+
+    /**
+     * @return array<int, TestParticipant>
+     */
+    private function participants(TestCourse $course): array
+    {
+        $result = [];
+        $people = [['Ruth', 'ruth@example.org'], ['Felix', 'felix@example.org'], ['Ohne', 'kaputt']];
+        foreach ($people as [$name, $email]) {
+            $participant = TestParticipant::create(['Name' => $name, 'Email' => $email, 'CourseID' => $course->ID]);
+            $participant->write();
+            $result[] = $participant;
+        }
+        return $result;
+    }
+
+    public function testOneMailPerEntryOfTheSubList(): void
+    {
+        $course = $this->course();
+        [$ruth, $felix, $broken] = $this->participants($course);
+        $service = MailService::singleton();
+        $template = $this->template('participants');
+
+        $this->assertCount(3, $service->entries($course, $template));
+        $draft = $service->draft($course, $template, $this->olga, $ruth);
+        $this->assertSame(['ruth@example.org'], $draft->to);
+        $this->assertSame('Paläographie: Info für Ruth', $draft->subject);
+        $this->assertStringContainsString("Hallo Ruth,\nder Kurs Paläographie findet in Marburg statt.", $draft->body);
+        $this->assertSame([], $service->draft($course, $template, $this->olga)->skipped, 'Item parts need an entry');
+
+        $mails = $service->sendEach($course, $template, [$ruth, $felix, $broken], $this->olga);
+
+        $this->assertCount(3, $mails);
+        $this->assertNotNull($this->findEmail('felix@example.org', null, 'Paläographie: Info für Felix'));
+        $this->assertSame(CaseMail::FAILED, $mails[2]->Mode, 'no valid address');
+        $this->assertSame('Felix', $mails[1]->getItemTitle());
+        $this->assertSame(1, CaseMail::forItem($felix)->count());
+        $this->assertSame(3, CaseMail::get()->filter('CaseID', $course->ID)->count(), 'all in the case file');
+    }
+
+    public function testMailFormSendsToTheChosenEntriesWithTheEditedText(): void
+    {
+        $course = $this->course();
+        [$ruth, $felix] = $this->participants($course);
+        $template = $this->template('participants');
+
+        $form = $this->composer($course, [])->setRequest(
+            (new HTTPRequest('GET', 'x', ['template' => $template->ID]))->setSession(new Session([]))
+        )->mailForm();
+        $entries = $form->Fields()->dataFieldByName('Entries');
+        $this->assertNotNull($entries);
+        $this->assertSame([(int) $ruth->ID, (int) $felix->ID], array_map('intval', (array) $entries->getValue()));
+        $this->assertNull($form->Actions()->fieldByName('action_doEml'), 'no mail file for mails per entry');
+
+        $data = [
+            'TemplateID' => $template->ID,
+            'Entries' => [$felix->ID],
+            'Cc' => '',
+            'Subject' => 'Neu: {{Item.Name}}',
+            'Body' => 'Liebe/r {{Item.Name}}, {{Title}}.',
+        ];
+        $sub = $this->composer($course, $data);
+        $sub->doSend($data, $sub->mailForm());
+
+        $this->assertSame(1, CaseMail::get()->count());
+        $email = $this->findEmail('felix@example.org', null, 'Neu: Felix');
+        $this->assertNotNull($email);
+        $this->assertStringContainsString('Liebe/r Felix, Paläographie.', (string) $email['Content']);
+        $this->assertNull($this->findEmail('ruth@example.org'));
+    }
+
+    public function testForEachMustBeAListOfTheCaseFile(): void
+    {
+        $template = $this->template('participants');
+        $template->ForEach = 'Venue';
+        $this->assertFalse($template->validate()->isValid());
+        $template->ForEach = 'Participants';
+        $this->assertTrue($template->validate()->isValid());
     }
 }

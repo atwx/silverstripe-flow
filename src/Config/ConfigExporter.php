@@ -219,6 +219,9 @@ class ConfigExporter
         $mails = [];
         foreach (MailTemplate::get()->filter('WorkflowID', $workflow->ID) as $template) {
             $entry = ['code' => $template->Code, 'title' => $template->Title, 'subject' => $template->Subject];
+            if ($template->forEachRelation() !== null) {
+                $entry['for_each'] = $template->forEachRelation();
+            }
             foreach (['Recipients' => 'to', 'Cc' => 'cc', 'ReplyTo' => 'reply_to'] as $field => $key) {
                 if ((string) $template->$field !== '') {
                     $entry[$key] = (string) $template->$field;

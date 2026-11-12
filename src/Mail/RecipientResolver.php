@@ -19,6 +19,8 @@ use SilverStripe\Security\Member;
  *   Family.Parents.Email (has_one, has_many and many_many; all records)
  * - Assignee.<responsibility>: the member assigned to the responsibility
  * - Me: the member who writes the mail
+ * - Item.<field path>: the sub-list entry of a mail per entry (Item.Email,
+ *   Item.School.Contact.Email)
  *
  * Placeholder braces are allowed ({{Contact.Email}}). Invalid and duplicate
  * addresses are left out. A domain class may add own tokens with
@@ -31,10 +33,17 @@ class RecipientResolver
     /**
      * @param array<int, string>|null $skipped Set to the parts that gave no valid
      *   address (e.g. "Assignee.lead (admin)" or "Contact.Email"), to tell the member
+     * @param DataObject|null $item The sub-list entry for Item.<field>; without an
+     *   entry these parts are ignored (not reported as skipped)
      * @return array<int, string>
      */
-    public function resolve(string $expression, DataObject $case, ?Member $me, ?array &$skipped = null): array
-    {
+    public function resolve(
+        string $expression,
+        DataObject $case,
+        ?Member $me,
+        ?array &$skipped = null,
+        ?DataObject $item = null
+    ): array {
         $addresses = [];
         $skipped = [];
         foreach (preg_split('/[,;\n]+/', $expression) ?: [] as $token) {
@@ -42,32 +51,53 @@ class RecipientResolver
             if ($token === '') {
                 continue;
             }
+            if (str_starts_with($token, 'Item.')) {
+                if (!$item) {
+                    continue;
+                }
+                $found = $this->values([$item], explode('.', substr($token, 5)));
+                $this->collect($token, $found, $addresses, $skipped);
+                continue;
+            }
             $found = $this->token($token, $case, $me);
             // extend() passes arguments by reference: keep the token itself unchanged.
             $hookToken = $token;
             $case->extend('updateFlowMailRecipients', $hookToken, $found);
-            $valid = 0;
-            $invalid = [];
-            foreach ($found as $address) {
-                $address = strtolower(trim((string) $address));
-                if (!filter_var($address, FILTER_VALIDATE_EMAIL)) {
-                    if ($address !== '') {
-                        $invalid[] = $address;
-                    }
-                    continue;
-                }
-                $valid++;
-                if (!in_array($address, $addresses, true)) {
-                    $addresses[] = $address;
-                }
-            }
-            if ($invalid) {
-                $skipped[] = $token . ' (' . implode(', ', $invalid) . ')';
-            } elseif ($valid === 0) {
-                $skipped[] = $token;
-            }
+            $this->collect($token, $found, $addresses, $skipped);
         }
         return $addresses;
+    }
+
+    /**
+     * Adds the valid addresses found for a token; reports the token as skipped
+     * when none was valid.
+     *
+     * @param array<int, mixed> $found
+     * @param array<int, string> $addresses
+     * @param array<int, string> $skipped
+     */
+    private function collect(string $token, array $found, array &$addresses, array &$skipped): void
+    {
+        $valid = 0;
+        $invalid = [];
+        foreach ($found as $address) {
+            $address = strtolower(trim((string) $address));
+            if (!filter_var($address, FILTER_VALIDATE_EMAIL)) {
+                if ($address !== '') {
+                    $invalid[] = $address;
+                }
+                continue;
+            }
+            $valid++;
+            if (!in_array($address, $addresses, true)) {
+                $addresses[] = $address;
+            }
+        }
+        if ($invalid) {
+            $skipped[] = $token . ' (' . implode(', ', $invalid) . ')';
+        } elseif ($valid === 0) {
+            $skipped[] = $token;
+        }
     }
 
     /**

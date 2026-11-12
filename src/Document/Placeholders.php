@@ -26,20 +26,28 @@ use SilverStripe\Security\Member;
  *   many_many relation of the case file; placeholders inside refer to that
  *   record (e.g. {{#Applications}}{{School.Name}}{{/Applications}})
  *
+ * - {{Item.Field}}, {{Item.Relation.Field}}: the sub-list entry of a mail per
+ *   entry (MailTemplate.ForEach)
+ *
  * Unknown placeholders become empty. Values are HTML-escaped unless $html is false.
  */
 class Placeholders
 {
     use Injectable;
 
-    public function replace(string $text, DataObject $case, ?Member $me, bool $html = true): string
-    {
+    public function replace(
+        string $text,
+        DataObject $case,
+        ?Member $me,
+        bool $html = true,
+        ?DataObject $item = null
+    ): string {
         $text = (string) preg_replace_callback(
             '/\{\{#([A-Za-z0-9_]+)\}\}(.*?)\{\{\/\1\}\}/s',
             fn (array $match) => $this->repeat($match[1], $match[2], $case, $me, $html),
             $text
         );
-        return $this->fill($text, $case, $me, $html);
+        return $this->fill($text, $case, $me, $html, $item);
     }
 
     /**
@@ -60,23 +68,25 @@ class Placeholders
         return $result;
     }
 
-    private function fill(string $text, DataObject $case, ?Member $me, bool $html): string
+    private function fill(string $text, DataObject $case, ?Member $me, bool $html, ?DataObject $item = null): string
     {
         return (string) preg_replace_callback(
             '/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/',
-            function (array $match) use ($case, $me, $html) {
-                $value = $this->value($match[1], $case, $me);
+            function (array $match) use ($case, $me, $html, $item) {
+                $value = $this->value($match[1], $case, $me, $item);
                 return $html ? htmlspecialchars($value, ENT_QUOTES | ENT_HTML5) : $value;
             },
             $text
         );
     }
 
-    public function value(string $path, DataObject $case, ?Member $me): string
+    public function value(string $path, DataObject $case, ?Member $me, ?DataObject $item = null): string
     {
         $parts = explode('.', $path);
         $head = array_shift($parts);
         switch ($head) {
+            case 'Item':
+                return $item && $parts ? $this->resolve($item, $parts) : '';
             case 'Today':
                 return date('d.m.Y');
             case 'Status':
