@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Model;
 
+use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
@@ -9,7 +10,8 @@ use SilverStripe\Security\Security;
 /**
  * A mail of a case file: sent, failed (the error is kept, the case file is not
  * affected) or created as a mail file for the member's mail program. Keeps the
- * full text as sent.
+ * full text as sent. A mail per entry of a sub-list also refers to the entry
+ * (Item).
  *
  * @property string $Mode sent, failed or eml
  * @property string $Recipients
@@ -24,7 +26,10 @@ use SilverStripe\Security\Security;
  * @property string $CaseClass
  * @property int $TemplateID
  * @property int $MemberID
+ * @property int $ItemID
+ * @property string $ItemClass
  * @method DataObject Case()
+ * @method DataObject Item()
  * @method MailTemplate Template()
  * @method Member Member()
  */
@@ -52,6 +57,7 @@ class CaseMail extends DataObject
         'Case' => DataObject::class,
         'Template' => MailTemplate::class,
         'Member' => Member::class,
+        'Item' => DataObject::class,
     ];
 
     private static array $summary_fields = [
@@ -73,6 +79,25 @@ class CaseMail extends DataObject
             self::FAILED => _t(self::class . '.MODE_FAILED', 'not sent'),
             self::EML => _t(self::class . '.MODE_EML', 'mail file'),
         ];
+    }
+
+    /**
+     * Mails sent for an entry of a sub-list (e.g. the mails to a school
+     * application).
+     *
+     * @return DataList<CaseMail>
+     */
+    public static function forItem(DataObject $item): DataList
+    {
+        // PHPStan reports static<T> from DataList::filter() as incompatible with DataList<T>.
+        // @phpstan-ignore return.type
+        return self::get()->filter(['ItemClass' => $item->ClassName, 'ItemID' => (int) $item->ID]);
+    }
+
+    public function getItemTitle(): string
+    {
+        $item = $this->ItemID ? $this->Item() : null;
+        return $item && $item->exists() ? (string) $item->getTitle() : '';
     }
 
     public function getModeLabel(): string
@@ -108,6 +133,7 @@ class CaseMail extends DataObject
         $labels['Mode'] = $labels['ModeLabel'] = _t(self::class . '.db_Mode', 'State');
         $labels['Error'] = _t(self::class . '.db_Error', 'Error');
         $labels['Automatic'] = _t(self::class . '.db_Automatic', 'Automatic');
+        $labels['Item'] = $labels['ItemTitle'] = _t(self::class . '.has_one_Item', 'Entry');
         return $labels;
     }
 

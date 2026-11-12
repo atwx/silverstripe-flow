@@ -15,6 +15,10 @@ use SilverStripe\ORM\DataObject;
  * as attachments. Sent from the case file (with a preview to edit before sending)
  * or automatically when the case file enters a status (SendOnStatus).
  *
+ * With ForEach (a has_many or many_many relation of the case file) one mail is
+ * sent per entry of that sub-list: {{Item.<field>}} in the texts and
+ * Item.<field> in the recipients refer to the entry.
+ *
  * @property string $Code
  * @property string $Title
  * @property string $Subject
@@ -23,6 +27,7 @@ use SilverStripe\ORM\DataObject;
  * @property string $Cc
  * @property string $ReplyTo
  * @property string $Attachments Comma-separated codes of document templates
+ * @property string $ForEach Relation of the case file: one mail per entry
  * @property int $Sort
  * @property int $WorkflowID
  * @property int $SendOnStatusID
@@ -44,6 +49,7 @@ class MailTemplate extends DataObject
         'Cc' => 'Varchar(255)',
         'ReplyTo' => 'Varchar(255)',
         'Attachments' => 'Varchar(255)',
+        'ForEach' => 'Varchar(100)',
         'Sort' => 'Int',
     ];
 
@@ -64,6 +70,25 @@ class MailTemplate extends DataObject
     ];
 
     private static string $default_sort = 'Sort ASC, ID ASC';
+
+    /**
+     * The relation whose entries get one mail each (null: one mail).
+     */
+    public function forEachRelation(): ?string
+    {
+        $relation = trim((string) $this->ForEach);
+        return $relation !== '' ? $relation : null;
+    }
+
+    /**
+     * Whether a relation of the class is a list (has_many or many_many).
+     */
+    public static function isListRelation(string $class, string $relation): bool
+    {
+        $schema = DataObject::getSchema();
+        return class_exists($class)
+            && ($schema->hasManyComponent($class, $relation) || $schema->manyManyComponent($class, $relation));
+    }
 
     /**
      * Document templates whose PDFs are attached.
@@ -87,6 +112,7 @@ class MailTemplate extends DataObject
     {
         $labels = parent::fieldLabels($includerelations);
         $labels['SendOnStatus.Title'] = _t(self::class . '.has_one_SendOnStatus', 'Send automatically on');
+        $labels['ForEach'] = _t(self::class . '.db_ForEach', 'One mail per entry of');
         return $labels;
     }
 
@@ -116,6 +142,11 @@ class MailTemplate extends DataObject
             self::class . '.ATTACHMENTS_DESCRIPTION',
             'Codes of document templates, comma-separated: their PDFs are created and attached.'
         ));
+        $fields->dataFieldByName('ForEach')?->setDescription(_t(
+            self::class . '.FOR_EACH_DESCRIPTION',
+            'Optional: a sub-list of the case file (relation name, e.g. Registrations). One mail is sent per '
+            . 'entry; {{Item.Field}} and Item.Email (recipients) refer to the entry.'
+        ));
         $fields->replaceField('SendOnStatusID', DropdownField::create(
             'SendOnStatusID',
             $this->fieldLabel('SendOnStatus'),
@@ -137,6 +168,16 @@ class MailTemplate extends DataObject
         }
         if (trim((string) $this->Subject) === '') {
             $result->addFieldError('Subject', _t(self::class . '.SUBJECT_REQUIRED', 'Please enter a subject.'));
+        }
+        $relation = $this->forEachRelation();
+        $workflow = $this->Workflow();
+        $caseClass = $workflow->exists() ? (string) $workflow->CaseClass : '';
+        if ($relation !== null && !self::isListRelation($caseClass, $relation)) {
+            $result->addFieldError('ForEach', _t(
+                self::class . '.FOR_EACH_UNKNOWN',
+                '"{relation}" is not a list of the case file.',
+                ['relation' => $relation]
+            ));
         }
         $status = $this->SendOnStatus();
         if ($status->exists() && (int) $status->WorkflowID !== (int) $this->WorkflowID) {

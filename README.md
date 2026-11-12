@@ -364,6 +364,7 @@ Each template has the following parts:
     relations, e.g. `Email`, `Contact.Email`, `Family.Parents.Email`
   - `Assignee.<responsibility>`, the member assigned to that responsibility
   - `Me`, the member who writes the mail
+  - `Item.<field path>`, the entry of a mail per entry (see below)
 
   Invalid addresses are left out. A domain class can add tokens of its own with
   `updateFlowMailRecipients(string $token, array &$addresses)`.
@@ -401,6 +402,29 @@ Each template has the following parts:
    existing documents of the case file.
 3. *Senden* sends the mail. *Im Mailprogramm öffnen* downloads it as an `.eml`
    file with `X-Unsent: 1`, which Outlook and Thunderbird open as a draft.
+
+**One mail per entry of a sub-list:** with `for_each` (a has_many or
+many_many relation of the case file) one mail is sent per entry, e.g. to every
+school of an application. `{{Item.<field>}}` in subject and body and
+`Item.<field path>` in the recipients refer to the entry:
+
+```yaml
+      - code: request_school
+        title: 'Anfrage an Schulen'
+        for_each: SchoolApplications
+        subject: 'Anfrage: {{Child.Name}} an {{Item.School.Name}}'
+        to: Item.School.ContactEmail
+        body: "Guten Tag,\n\nwir möchten {{Child.Name}} …"
+```
+
+- The mail form lists the entries with their recipients; entries without a
+  valid address cannot be chosen. Subject and body keep their placeholders and
+  are filled per entry when sending; a preview shows the first entry. There is
+  no mail file (*Im Mailprogramm öffnen*) for these templates.
+- With `send_on`, a mail goes to every entry.
+- PDFs of document templates are created once and attached to every mail.
+- Each mail is recorded in the case file and refers to its entry
+  (`CaseMail.Item`; `CaseMail::forItem($entry)` lists the mails of an entry).
 
 **Record of every mail:** each mail is kept as `CaseMail` with its full text.
 It appears in the sub-list *Mails* and in the timeline as sent, not sent or

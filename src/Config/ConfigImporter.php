@@ -327,6 +327,7 @@ class ConfigImporter
         $template->Recipients = (string) ($definition['to'] ?? '');
         $template->Cc = (string) ($definition['cc'] ?? '');
         $template->ReplyTo = (string) ($definition['reply_to'] ?? '');
+        $template->ForEach = (string) ($definition['for_each'] ?? '');
         $attach = $definition['attach'] ?? [];
         if (!is_array($attach)) {
             throw new ConfigException("{$path} ({$code}): \"attach\" must be a list of document codes.");

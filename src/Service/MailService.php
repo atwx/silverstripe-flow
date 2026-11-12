@@ -6,6 +6,7 @@ use Atwx\Flow\Document\Placeholders;
 use Atwx\Flow\Mail\RecipientResolver;
 use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CaseMail;
+use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
@@ -14,6 +15,7 @@ use SilverStripe\Control\Email\Email;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Member;
 use Throwable;
@@ -49,30 +51,93 @@ class MailService
     }
 
     /**
-     * Draft of a mail: recipients resolved, placeholders filled; attachments are
-     * the template's document templates (by ID) and no existing documents.
+     * Entries of the sub-list of a template with ForEach (empty otherwise).
+     *
+     * @return array<int, DataObject>
      */
-    public function draft(DataObject $case, MailTemplate $template, ?Member $me): MailDraft
+    public function entries(DataObject $case, MailTemplate $template): array
+    {
+        $relation = $template->forEachRelation();
+        if ($relation === null || !MailTemplate::isListRelation($case::class, $relation)) {
+            return [];
+        }
+        $list = $case->$relation();
+        return $list instanceof SS_List ? iterator_to_array($list, false) : [];
+    }
+
+    /**
+     * Draft of a mail: recipients resolved, placeholders filled; attachments are
+     * the template's document templates (by ID) and no existing documents. With
+     * an entry of the sub-list, Item.<field> refers to it.
+     */
+    public function draft(DataObject $case, MailTemplate $template, ?Member $me, ?DataObject $item = null): MailDraft
     {
         $this->assertTemplateOf($case, $template);
         $resolver = RecipientResolver::singleton();
         $placeholders = Placeholders::singleton();
         $draft = MailDraft::create();
         $draft->templateID = (int) $template->ID;
-        $draft->to = $resolver->resolve((string) $template->Recipients, $case, $me, $skippedTo);
-        $draft->cc = $resolver->resolve((string) $template->Cc, $case, $me, $skippedCc);
-        $draft->replyTo = $resolver->resolve((string) $template->ReplyTo, $case, $me, $skippedReplyTo)[0] ?? '';
+        $draft->item = $item;
+        $draft->to = $resolver->resolve((string) $template->Recipients, $case, $me, $skippedTo, $item);
+        $draft->cc = $resolver->resolve((string) $template->Cc, $case, $me, $skippedCc, $item);
+        $draft->replyTo = $resolver->resolve((string) $template->ReplyTo, $case, $me, $skippedReplyTo, $item)[0] ?? '';
         $draft->skipped = array_values(array_unique(array_merge(
             (array) $skippedTo,
             (array) $skippedCc,
             (array) $skippedReplyTo
         )));
-        $draft->subject = trim($placeholders->replace((string) $template->Subject, $case, $me, false));
-        $draft->body = $placeholders->replace((string) $template->Body, $case, $me, false);
+        $draft->subject = trim($placeholders->replace((string) $template->Subject, $case, $me, false, $item));
+        $draft->body = $placeholders->replace((string) $template->Body, $case, $me, false, $item);
         foreach ($template->attachmentTemplates() as $documentTemplate) {
             $draft->documentTemplateIDs[] = (int) $documentTemplate->ID;
         }
         return $draft;
+    }
+
+    /**
+     * One mail per entry of a template with ForEach. $base holds the texts as
+     * edited in the mail form (placeholders still in them, filled per entry),
+     * Cc, Reply-To and attachments; without it the template is used. PDFs of
+     * document templates are created once and attached to every mail.
+     *
+     * @param array<int, DataObject> $entries
+     * @return array<int, CaseMail>
+     */
+    public function sendEach(
+        DataObject $case,
+        MailTemplate $template,
+        array $entries,
+        ?Member $by,
+        ?MailDraft $base = null,
+        bool $automatic = false
+    ): array {
+        $placeholders = Placeholders::singleton();
+        $documentIDs = $base ? $base->documentIDs : [];
+        $templateIDs = $base ? $base->documentTemplateIDs : array_map(
+            fn ($documentTemplate) => (int) $documentTemplate->ID,
+            $template->attachmentTemplates()
+        );
+        $documents = DocumentService::singleton();
+        foreach ($templateIDs as $id) {
+            $documentTemplate = DocumentTemplate::get()->byID($id);
+            if ($documentTemplate && $entries) {
+                $documentIDs[] = (int) $documents->create($case, $documentTemplate, $by)->ID;
+            }
+        }
+        $mails = [];
+        foreach ($entries as $item) {
+            $draft = $this->draft($case, $template, $by, $item);
+            if ($base) {
+                $draft->subject = trim($placeholders->replace($base->subject, $case, $by, false, $item));
+                $draft->body = $placeholders->replace($base->body, $case, $by, false, $item);
+                $draft->cc = $base->cc;
+                $draft->replyTo = $base->replyTo;
+            }
+            $draft->documentTemplateIDs = [];
+            $draft->documentIDs = $documentIDs;
+            $mails[] = $this->send($case, $draft, $by, $automatic);
+        }
+        return $mails;
     }
 
     /**
@@ -137,6 +202,14 @@ class MailService
             'SendOnStatusID' => (int) $change->ToID,
         ]);
         foreach ($templates as $template) {
+            if ($template->forEachRelation() !== null) {
+                try {
+                    $this->sendEach($case, $template, $this->entries($case, $template), $by, null, true);
+                } catch (Throwable $e) {
+                    Injector::inst()->get(LoggerInterface::class)->error('Flow mails failed: ' . $e->getMessage());
+                }
+                continue;
+            }
             try {
                 $draft = $this->draft($case, $template, $by);
             } catch (Throwable $e) {
@@ -163,6 +236,8 @@ class MailService
             'Subject' => $draft->subject,
             'Body' => $draft->body,
             'Automatic' => $automatic,
+            'ItemClass' => $draft->item ? $draft->item->ClassName : null,
+            'ItemID' => (int) $draft->item?->ID,
         ]);
     }
 
@@ -192,7 +267,7 @@ class MailService
         }
         $documents = DocumentService::singleton();
         foreach ($draft->documentTemplateIDs as $id) {
-            $template = \Atwx\Flow\Model\DocumentTemplate::get()->byID($id);
+            $template = DocumentTemplate::get()->byID($id);
             if (!$template) {
                 continue;
             }

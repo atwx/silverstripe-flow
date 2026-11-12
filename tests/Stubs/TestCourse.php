@@ -15,6 +15,7 @@ use SilverStripe\ORM\DataObject;
  * @property string $Description
  * @property string $Audience
  * @property string $InternalNote
+ * @method \SilverStripe\ORM\HasManyList<TestParticipant> Participants()
  */
 class TestCourse extends DataObject implements TestOnly
 {
@@ -30,6 +31,10 @@ class TestCourse extends DataObject implements TestOnly
         'Description' => 'Text',
         'Audience' => 'Varchar(255)',
         'InternalNote' => 'Text',
+    ];
+
+    private static array $has_many = [
+        'Participants' => TestParticipant::class,
     ];
 
     private static array $summary_fields = [

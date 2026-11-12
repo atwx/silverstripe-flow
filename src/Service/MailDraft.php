@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Service;
 
 use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\ORM\DataObject;
 
 /**
  * A mail before it is sent: filled from a template, edited in the mail form.
@@ -49,4 +50,9 @@ class MailDraft
      * @var array<int, int>
      */
     public array $documentIDs = [];
+
+    /**
+     * The sub-list entry of a template with ForEach (recorded with the mail).
+     */
+    public ?DataObject $item = null;
 }
