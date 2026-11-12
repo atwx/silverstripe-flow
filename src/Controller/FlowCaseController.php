@@ -354,17 +354,24 @@ abstract class FlowCaseController extends FrontdeskController
         AccessLinkSubController::class,
         CaseDocumentSubController::class,
         FollowUpSubController::class,
+        ChecklistSubController::class,
     ];
 
     private static array $allowed_actions = [
         'links',
         'documents',
         'followups',
+        'checklist',
     ];
 
     public function links(HTTPRequest $request): AccessLinkSubController
     {
         return AccessLinkSubController::create()->setParentContext($this, (int) $request->param('ID'));
+    }
+
+    public function checklist(HTTPRequest $request): ChecklistSubController
+    {
+        return ChecklistSubController::create()->setParentContext($this, (int) $request->param('ID'));
     }
 
     public function followups(HTTPRequest $request): FollowUpSubController
@@ -449,6 +456,9 @@ abstract class FlowCaseController extends FrontdeskController
         foreach ($data as $item) {
             if ($item->Segment === $segment) {
                 $item->Title = _t(AccessLinkSubController::class . '.TITLE', 'Edit links');
+            }
+            if ($item->Segment === ChecklistSubController::config()->get('url_segment')) {
+                $item->Title = _t(ChecklistSubController::class . '.TITLE', 'Checklist');
             }
             if ($item->Segment === FollowUpSubController::config()->get('url_segment')) {
                 $item->Title = _t(FollowUpSubController::class . '.TITLE', 'Follow-ups');

@@ -108,6 +108,15 @@ class TransitionService
             ));
         }
 
+        $missing = ChecklistService::singleton()->missingBefore($case, $to);
+        if ($missing) {
+            throw new TransitionException(_t(
+                self::class . '.CHECKLIST_MISSING',
+                'Before "{status}" the checklist needs: {items}.',
+                ['status' => $to->Title, 'items' => implode(', ', $missing)]
+            ));
+        }
+
         $change = null;
         DB::get_conn()->withTransaction(function () use ($case, $transition, $actor, $comment, $fromID, &$change) {
             // Refuse if someone else changed the status in the meantime.
