@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Config;
 
 use Atwx\Flow\Model\ChecklistItem;
+use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
@@ -100,6 +101,7 @@ class ConfigImporter
             'documents' => $this->importDocumentTemplate(...),
             'follow_ups' => $this->importFollowUpRule(...),
             'checklist' => $this->importChecklistItem(...),
+            'mails' => $this->importMailTemplate(...),
             'permissions' => $this->importPermission(...),
         ];
         foreach ($sections as $key => $importer) {
@@ -310,6 +312,39 @@ class ConfigImporter
         $item->FileMode = $file;
         $item->Sort = $index + 1;
         $this->save($item, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importMailTemplate(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $template = $this->child(MailTemplate::class, $workflow, $code);
+        $template->Title = $this->string($definition, 'title', $path);
+        $template->Subject = $this->string($definition, 'subject', $path);
+        $template->Body = (string) ($definition['body'] ?? '');
+        $template->Recipients = (string) ($definition['to'] ?? '');
+        $template->Cc = (string) ($definition['cc'] ?? '');
+        $template->ReplyTo = (string) ($definition['reply_to'] ?? '');
+        $attach = $definition['attach'] ?? [];
+        if (!is_array($attach)) {
+            throw new ConfigException("{$path} ({$code}): \"attach\" must be a list of document codes.");
+        }
+        foreach ($attach as $documentCode) {
+            $exists = DocumentTemplate::get()
+                ->filter(['WorkflowID' => $workflow->ID, 'Code' => (string) $documentCode])
+                ->exists();
+            if (!$exists) {
+                throw new ConfigException("{$path} ({$code}): unknown document \"{$documentCode}\".");
+            }
+        }
+        $template->Attachments = implode(',', array_map('strval', $attach));
+        $template->SendOnStatusID = isset($definition['send_on'])
+            ? $this->status($workflow, (string) $definition['send_on'], $path)->ID
+            : 0;
+        $template->Sort = $index + 1;
+        $this->save($template, "{$path} ({$code})");
     }
 
     /**

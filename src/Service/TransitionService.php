@@ -142,6 +142,8 @@ class TransitionService
         $result = $change;
         $case->invokeWithExtensions('onAfterTransition', $change, $actor);
         $this->extend('onAfterTransition', $case, $change, $actor);
+        // Automatic mails; failures are recorded, never thrown.
+        MailService::singleton()->onStatusChange($case, $result, $actor->flowMember());
 
         return $result;
     }

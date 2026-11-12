@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Config;
 
 use Atwx\Flow\Model\ChecklistItem;
+use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
@@ -212,6 +213,30 @@ class ConfigExporter
         }
         if ($checklist) {
             $data['checklist'] = $checklist;
+        }
+
+        // Only written when there are mail templates, so older files stay unchanged.
+        $mails = [];
+        foreach (MailTemplate::get()->filter('WorkflowID', $workflow->ID) as $template) {
+            $entry = ['code' => $template->Code, 'title' => $template->Title, 'subject' => $template->Subject];
+            foreach (['Recipients' => 'to', 'Cc' => 'cc', 'ReplyTo' => 'reply_to'] as $field => $key) {
+                if ((string) $template->$field !== '') {
+                    $entry[$key] = (string) $template->$field;
+                }
+            }
+            $entry['body'] = (string) $template->Body;
+            $attach = array_values(array_filter(array_map('trim', explode(',', (string) $template->Attachments))));
+            if ($attach) {
+                $entry['attach'] = $attach;
+            }
+            $status = $template->SendOnStatus();
+            if ($status->exists()) {
+                $entry['send_on'] = $status->Code;
+            }
+            $mails[] = $entry;
+        }
+        if ($mails) {
+            $data['mails'] = $mails;
         }
 
         $roleSort = array_flip(FlowRole::get()->filter('WorkflowID', $workflow->ID)->column('ID'));

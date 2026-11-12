@@ -9,6 +9,7 @@ use Atwx\Flow\Model\AccessLink;
 use Atwx\Flow\Model\Assignment;
 use Atwx\Flow\Model\AssignmentChange;
 use Atwx\Flow\Model\CaseDocument;
+use Atwx\Flow\Model\CaseMail;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
@@ -23,6 +24,7 @@ use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Service\AssignmentService;
 use Atwx\Flow\Service\DocumentService;
+use Atwx\Flow\Service\MailService;
 use Atwx\Flow\Service\FieldAccess;
 use Atwx\Flow\Ui\CustomFieldUi;
 use Atwx\Flow\Ui\FlowFieldLayout;
@@ -357,6 +359,7 @@ abstract class FlowCaseController extends FrontdeskController
         CaseDocumentSubController::class,
         FollowUpSubController::class,
         ChecklistSubController::class,
+        CaseMailSubController::class,
     ];
 
     private static array $allowed_actions = [
@@ -364,7 +367,24 @@ abstract class FlowCaseController extends FrontdeskController
         'documents',
         'followups',
         'checklist',
+        'mails',
     ];
+
+    public function mails(HTTPRequest $request): CaseMailSubController
+    {
+        return CaseMailSubController::create()->setParentContext($this, (int) $request->param('ID'));
+    }
+
+    /**
+     * Whether the current member may write mails from the case file: a role in the
+     * workflow (the edit permission is checked by the caller).
+     */
+    public function mayWriteMails(DataObject $case): bool
+    {
+        $actor = $this->flowActor();
+        $workflow = $this->flowWorkflow();
+        return $actor && $workflow && $actor->flowRoleCodes($workflow, $case) !== [];
+    }
 
     public function links(HTTPRequest $request): AccessLinkSubController
     {
@@ -468,6 +488,9 @@ abstract class FlowCaseController extends FrontdeskController
             if ($item->Segment === CaseDocumentSubController::config()->get('url_segment')) {
                 $item->Title = _t(CaseDocumentSubController::class . '.TITLE', 'Documents');
             }
+            if ($item->Segment === CaseMailSubController::config()->get('url_segment')) {
+                $item->Title = _t(CaseMailSubController::class . '.TITLE', 'Mails');
+            }
         }
         return $data;
     }
@@ -482,6 +505,10 @@ abstract class FlowCaseController extends FrontdeskController
         $document = $this->documentAction($record);
         if ($document) {
             $actions[] = $document;
+        }
+        $mail = $this->mailAction($record);
+        if ($mail) {
+            $actions[] = $mail;
         }
         $assign = $this->assignAction($record);
         if ($assign) {
@@ -531,6 +558,27 @@ abstract class FlowCaseController extends FrontdeskController
                     ['title' => $document->Title]
                 );
             });
+    }
+
+    /**
+     * "Write mail": choose a template, then the mail form (preview, edit, send).
+     */
+    protected function mailAction(DataObject $record): ?RecordAction
+    {
+        $templates = MailService::singleton()->templatesFor($record);
+        if (!$templates || !$record->isInDB() || !$this->canEdit() || !$this->mayWriteMails($record)) {
+            return null;
+        }
+        $options = [];
+        foreach ($templates as $template) {
+            $options[(string) $template->ID] = (string) $template->Title;
+        }
+        return RecordAction::create('flowmail', _t(self::class . '.MAIL', 'Write mail'))
+            ->options($options)
+            ->submitLabel(_t(self::class . '.MAIL_COMPOSE', 'Continue'))
+            ->handle(fn (DataObject $record, ?string $option) => $this->redirect(
+                $this->Link('mails/' . $record->ID . '/compose') . '?template=' . (int) $option
+            ));
     }
 
     /**
@@ -651,6 +699,9 @@ abstract class FlowCaseController extends FrontdeskController
                 'document'
             ));
         }
+        foreach (CaseMail::get()->filter($case) as $mail) {
+            $entries->push($this->mailEntry($mail));
+        }
         foreach (AssignmentChange::get()->filter($case) as $change) {
             $entries->push($this->assignmentChangeEntry($change));
         }
@@ -704,6 +755,37 @@ abstract class FlowCaseController extends FrontdeskController
         }
         $this->extend('updateFlowTimeline', $entries, $record);
         return $entries;
+    }
+
+    /**
+     * Timeline entry of a mail: subject, recipients and the full text (failed
+     * mails with the error).
+     */
+    protected function mailEntry(CaseMail $mail): ArrayData
+    {
+        $subject = ['subject' => $mail->Subject];
+        $title = match ((string) $mail->Mode) {
+            CaseMail::FAILED => _t(self::class . '.TIMELINE_MAIL_FAILED', 'Mail not sent: {subject}', $subject),
+            CaseMail::EML => _t(
+                self::class . '.TIMELINE_MAIL_EML',
+                'Mail created for the mail program: {subject}',
+                $subject
+            ),
+            default => _t(self::class . '.TIMELINE_MAIL_SENT', 'Mail sent: {subject}', $subject),
+        };
+        $labels = $mail->fieldLabels();
+        $text = $labels['Recipients'] . ': ' . $mail->Recipients;
+        if ($mail->Cc) {
+            $text .= "\n" . $labels['Cc'] . ': ' . $mail->Cc;
+        }
+        if ($mail->AttachmentNames) {
+            $text .= "\n" . $labels['AttachmentNames'] . ': ' . $mail->AttachmentNames;
+        }
+        if ($mail->Mode === CaseMail::FAILED && $mail->Error) {
+            $text .= "\n" . $labels['Error'] . ': ' . $mail->Error;
+        }
+        $text .= "\n\n" . $mail->Body;
+        return TimelineEntry::create((string) $mail->Created, $title, $text, $mail->getSenderName(), 'mail');
     }
 
     protected function assignmentChangeEntry(AssignmentChange $change): ArrayData

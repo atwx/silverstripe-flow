@@ -32,6 +32,7 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<DocumentTemplate> DocumentTemplates()
  * @method HasManyList<FollowUpRule> FollowUpRules()
  * @method HasManyList<ChecklistItem> ChecklistItems()
+ * @method HasManyList<MailTemplate> MailTemplates()
  */
 class Workflow extends DataObject
 {
@@ -61,9 +62,11 @@ class Workflow extends DataObject
         'DocumentTemplates' => DocumentTemplate::class,
         'FollowUpRules' => FollowUpRule::class,
         'ChecklistItems' => ChecklistItem::class,
+        'MailTemplates' => MailTemplate::class,
     ];
 
     private static array $cascade_deletes = [
+        'MailTemplates',
         'ChecklistItems',
         'FollowUpRules',
         'DocumentTemplates',
@@ -121,7 +124,7 @@ class Workflow extends DataObject
         // Child records can only be created inside their workflow, never linked across workflows.
         $relations = [
             'Phases', 'Statuses', 'Transitions', 'Roles', 'FieldPermissions', 'CustomFields', 'Responsibilities',
-            'DocumentTemplates', 'FollowUpRules', 'ChecklistItems',
+            'DocumentTemplates', 'FollowUpRules', 'ChecklistItems', 'MailTemplates',
         ];
         foreach ($relations as $relation) {
             $grid = $fields->dataFieldByName($relation);
