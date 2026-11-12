@@ -162,8 +162,8 @@ class Placeholders
 
     private function link(DataObject $case): string
     {
-        $controller = FollowUpController::caseControllerFor($case::class);
-        return $controller && $case->isInDB() ? Director::absoluteURL($controller->Link('view/' . $case->ID)) : '';
+        $link = FollowUpController::recordLink($case);
+        return $link ? Director::absoluteURL($link) : '';
     }
 
     private function customField(DataObject $case, string $code): string

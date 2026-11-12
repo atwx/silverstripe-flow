@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Tests\Stubs;
 
+use Atwx\Flow\Extension\CommentsExtension;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
 
@@ -12,10 +13,15 @@ use SilverStripe\ORM\DataObject;
  * @property string $Email
  * @property int $CourseID
  * @method TestCourse Course()
+ * @mixin CommentsExtension
  */
 class TestParticipant extends DataObject implements TestOnly
 {
     private static string $table_name = 'FlowTest_Participant';
+
+    private static array $extensions = [
+        CommentsExtension::class,
+    ];
 
     private static array $db = [
         'Name' => 'Varchar(255)',

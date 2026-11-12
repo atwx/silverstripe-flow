@@ -2,67 +2,92 @@
 
 namespace Atwx\Flow\Controller;
 
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController;
+use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskSubController;
+use Atwx\SilverstripeFrontdeskKit\Filter\FilterCollection;
+use Atwx\SilverstripeFrontdeskKit\Filter\SelectFilter;
 use Atwx\SilverstripeFrontdeskKit\Table\BulkAction;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\ListView;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
 
 /**
- * Open follow-ups of all case files the member may see ("Wiedervorlagen"):
- * views "Mine, due" and "Mine", link to the case file, bulk action "Done".
- * Projects route it, e.g. 'followups//$Action/$ID/$OtherID'.
+ * Open follow-ups and to-dos of all records the member may see: views "Mine,
+ * due", "My follow-ups", "My to-dos", "To-do basket" (to-dos without anyone
+ * responsible) and "Overdue", filters by kind and member, link to the record,
+ * bulk actions "Done" and "Take over". Projects route it, e.g.
+ * 'followups//$Action/$ID/$OtherID'.
  */
 class FollowUpController extends FrontdeskController
 {
-    private static string $managed_model = FollowUp::class;
+    private static string $managed_model = Comment::class;
 
     private static string $url_segment = 'followups';
 
     private static string $title = 'Wiedervorlagen';
 
     /**
-     * Follow-ups are added in the case file.
+     * Entries are added in the record.
      */
     private static bool $allow_add = false;
 
     /**
-     * Case controllers by case class (the first subclass found for a class).
+     * Record controllers by managed class (the first one found for a class).
      *
-     * @var array<string, FlowCaseController>|null
+     * @var array<string, FrontdeskController>|null
      */
     protected static ?array $caseControllerCache = null;
 
     /**
-     * Open follow-ups of case files whose list the member may view.
+     * Open follow-ups and to-dos of records whose list the member may view.
      *
-     * @return DataList<FollowUp>
+     * @return DataList<Comment>
      */
     protected function getBaseList(): DataList
     {
         $classes = [];
-        foreach (self::caseControllers() as $class => $controller) {
+        foreach (self::recordControllers() as $class => $controller) {
             if ($controller->canView()) {
                 $classes[] = $class;
             }
         }
         // PHPStan reports static<T> from DataList::filter() as incompatible with DataList<T>.
         // @phpstan-ignore return.type
-        return FollowUp::get()->filter(['IsDone' => false, 'CaseClass' => $classes ?: ['-']]);
+        return Comment::get()
+            ->filter([
+                'IsDone' => false,
+                'Kind' => Comment::TASK_KINDS,
+                'RecordClass' => $classes ?: ['-'],
+            ])
+            ->sort(['DueDate' => 'ASC', 'DueTime' => 'ASC', 'Created' => 'ASC', 'ID' => 'ASC']);
     }
 
     /**
-     * @return array<string, FlowCaseController>
+     * Frontdesk controllers of records (not sub-lists, not this list), by the
+     * class they manage. Comments and follow-ups link to them.
+     *
+     * @return array<string, FrontdeskController>
      */
-    protected static function caseControllers(): array
+    protected static function recordControllers(): array
     {
         if (self::$caseControllerCache === null) {
             self::$caseControllerCache = [];
-            foreach (ClassInfo::subclassesFor(FlowCaseController::class, false) as $class) {
+            // Case controllers first: a case class is linked to its case file.
+            $classes = array_merge(
+                ClassInfo::subclassesFor(FlowCaseController::class, false),
+                ClassInfo::subclassesFor(FrontdeskController::class, false)
+            );
+            foreach ($classes as $class) {
+                $skip = is_a($class, FrontdeskSubController::class, true) || is_a($class, self::class, true)
+                    || (new \ReflectionClass($class))->isAbstract();
+                if ($skip) {
+                    continue;
+                }
                 $controller = singleton($class);
                 $model = (string) $controller->config()->get('managed_model');
                 if ($model !== '' && !isset(self::$caseControllerCache[$model])) {
@@ -74,45 +99,98 @@ class FollowUpController extends FrontdeskController
     }
 
     /**
-     * The controller of case files of a class (for links), if there is one.
+     * The controller of records of a class (for links and permissions), if there is one.
+     */
+    public static function recordControllerFor(string $class): ?FrontdeskController
+    {
+        return self::recordControllers()[$class] ?? null;
+    }
+
+    /**
+     * The case controller of case files of a class, if there is one.
      */
     public static function caseControllerFor(string $class): ?FlowCaseController
     {
-        return self::caseControllers()[$class] ?? null;
+        $controller = self::recordControllerFor($class);
+        return $controller instanceof FlowCaseController ? $controller : null;
+    }
+
+    /**
+     * Link to the view of a record (null without a controller).
+     */
+    public static function recordLink(DataObject $record): ?string
+    {
+        $controller = self::recordControllerFor($record::class);
+        return $controller && $record->isInDB() ? $controller->Link('view/' . $record->ID) : null;
     }
 
     protected function defineColumns(): ColumnCollection
     {
-        $labels = FollowUp::singleton()->fieldLabels();
+        $labels = Comment::singleton()->fieldLabels();
         return ColumnCollection::create()
             ->make('DueDate', $labels['DueDate'])->format(FollowUpColumns::dueFormatter())->type('html')->end()
-            ->make('CaseTitle', _t(self::class . '.CASE', 'Case file'))
-                ->format(fn ($value, DataObject $record) => $this->caseLink($record))
+            ->make('RecordTitle', $labels['RecordTitle'])
+                ->format(fn ($value, DataObject $record) => $this->recordAnchor($record))
                 ->type('html')
                 ->end()
-            ->make('Text', $labels['Text'])->end()
-            ->make('Member.Name', $labels['Member.Name'])->end();
+            ->make('Summary', $labels['Text'])->format(FollowUpColumns::summaryFormatter())->type('html')->end()
+            ->make('CreatedBy.Name', $labels['CreatedBy'])
+                ->format(fn ($value, DataObject $record) => $value
+                    ? $value . ', ' . date('d.m.Y', (int) strtotime((string) $record->Created))
+                    : '')
+                ->end();
     }
 
-    private function caseLink(DataObject $followUp): string
+    private function recordAnchor(DataObject $comment): string
     {
-        /** @var FollowUp $followUp */
-        $case = $followUp->Case();
-        if (!$case->exists()) {
+        if (!$comment instanceof Comment) {
             return '';
         }
-        $title = htmlspecialchars((string) $case->getTitle());
-        $controller = self::caseControllerFor($case::class);
-        if (!$controller) {
-            return $title;
+        $record = $comment->Record();
+        if (!$record->exists()) {
+            return '';
         }
-        $href = htmlspecialchars($controller->Link('view/' . $case->ID));
-        return '<a class="link" href="' . $href . '">' . $title . '</a>';
+        $title = htmlspecialchars((string) $record->getTitle());
+        $href = self::recordLink($record);
+        return $href ? '<a class="link" href="' . htmlspecialchars($href) . '">' . $title . '</a>' : $title;
     }
 
     protected function defineRowActions(DataObject $record): array
     {
         return [];
+    }
+
+    protected function defineFilters(): FilterCollection
+    {
+        $labels = Comment::singleton()->fieldLabels();
+        $kinds = array_intersect_key(Comment::kindOptions(), array_flip(Comment::TASK_KINDS));
+        return FilterCollection::create()
+            ->add(
+                SelectFilter::create('Kind', $labels['Kind'])
+                    ->options($kinds)
+                    ->apply(fn (DataList $list, $value) => $list->filter('Kind', $value))
+            )
+            ->add(
+                SelectFilter::create('Member', $labels['MemberID'])
+                    ->options(fn () => $this->responsibleOptions())
+                    ->apply(fn (DataList $list, $value) => $list->filter('MemberID', (int) $value))
+            );
+    }
+
+    /**
+     * Members with open entries.
+     *
+     * @return array<int, string>
+     */
+    private function responsibleOptions(): array
+    {
+        $ids = $this->getBaseList()->filter('MemberID:GreaterThan', 0)->columnUnique('MemberID');
+        $options = [];
+        foreach ($ids ? Member::get()->byIDs($ids) : [] as $member) {
+            $options[(int) $member->ID] = (string) $member->getName();
+        }
+        asort($options);
+        return $options;
     }
 
     /**
@@ -127,8 +205,12 @@ class FollowUpController extends FrontdeskController
                     'MemberID' => $me,
                     'DueDate:LessThanOrEqual' => date('Y-m-d'),
                 ])),
-            ListView::create('mine', _t(self::class . '.VIEW_MINE', 'Mine'))
-                ->query(fn (DataList $list) => $list->filter('MemberID', $me)),
+            ListView::create('mine', _t(self::class . '.VIEW_MINE', 'My follow-ups'))
+                ->query(fn (DataList $list) => $list->filter(['MemberID' => $me, 'Kind' => Comment::FOLLOW_UP])),
+            ListView::create('todos', _t(self::class . '.VIEW_TODOS', 'My to-dos'))
+                ->query(fn (DataList $list) => $list->filter(['MemberID' => $me, 'Kind' => Comment::TODO])),
+            ListView::create('basket', _t(self::class . '.VIEW_BASKET', 'To-do basket'))
+                ->query(fn (DataList $list) => $list->filter(['MemberID' => 0, 'Kind' => Comment::TODO])),
             ListView::create('overdue', _t(self::class . '.VIEW_OVERDUE', 'Overdue'))
                 ->query(fn (DataList $list) => $list->filter('DueDate:LessThan', date('Y-m-d'))),
         ];
@@ -142,14 +224,26 @@ class FollowUpController extends FrontdeskController
         return [
             BulkAction::create('done', _t(self::class . '.DONE', 'Mark as done'), function (DataList $records) {
                 $count = 0;
-                foreach ($records as $followUp) {
-                    if ($followUp->canEdit()) {
-                        $followUp->IsDone = true;
-                        $followUp->write();
+                foreach ($records as $comment) {
+                    if ($comment->canEdit()) {
+                        $comment->IsDone = true;
+                        $comment->write();
                         $count++;
                     }
                 }
-                return _t(self::class . '.DONE_COUNT', '{count} follow-ups done.', ['count' => $count]);
+                return _t(self::class . '.DONE_COUNT', '{count} entries done.', ['count' => $count]);
+            }),
+            BulkAction::create('take', _t(self::class . '.TAKE', 'Take over'), function (DataList $records) {
+                $me = (int) Security::getCurrentUser()?->ID;
+                $count = 0;
+                foreach ($records as $comment) {
+                    if ($me && $comment->canEdit()) {
+                        $comment->MemberID = $me;
+                        $comment->write();
+                        $count++;
+                    }
+                }
+                return _t(self::class . '.TAKE_COUNT', '{count} entries taken over.', ['count' => $count]);
             }),
         ];
     }

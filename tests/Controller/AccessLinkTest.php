@@ -246,7 +246,7 @@ class AccessLinkTest extends FunctionalTest
         $this->assertNotNull($timeline);
         $kinds = array_count_values($timeline->column('Kind'));
         $this->assertSame(
-            ['status' => 1, 'followup' => 1, 'link' => 2],
+            ['status' => 1, 'comment' => 1, 'link' => 2],
             $kinds,
             'created (in "with_speaker", with its follow-up rule); link created and revoked'
         );

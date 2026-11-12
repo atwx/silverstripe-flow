@@ -14,7 +14,7 @@ use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
 use Atwx\Flow\Model\FieldPermission;
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\Flow\Model\LinkAccess;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Phase;
@@ -357,7 +357,7 @@ abstract class FlowCaseController extends FrontdeskController
     private static array $sub_controllers = [
         AccessLinkSubController::class,
         CaseDocumentSubController::class,
-        FollowUpSubController::class,
+        CommentSubController::class,
         ChecklistSubController::class,
         CaseMailSubController::class,
     ];
@@ -365,7 +365,7 @@ abstract class FlowCaseController extends FrontdeskController
     private static array $allowed_actions = [
         'links',
         'documents',
-        'followups',
+        'comments',
         'checklist',
         'mails',
     ];
@@ -396,9 +396,9 @@ abstract class FlowCaseController extends FrontdeskController
         return ChecklistSubController::create()->setParentContext($this, (int) $request->param('ID'));
     }
 
-    public function followups(HTTPRequest $request): FollowUpSubController
+    public function comments(HTTPRequest $request): CommentSubController
     {
-        return FollowUpSubController::create()->setParentContext($this, (int) $request->param('ID'));
+        return CommentSubController::create()->setParentContext($this, (int) $request->param('ID'));
     }
 
     public function documents(HTTPRequest $request): CaseDocumentSubController
@@ -482,8 +482,8 @@ abstract class FlowCaseController extends FrontdeskController
             if ($item->Segment === ChecklistSubController::config()->get('url_segment')) {
                 $item->Title = _t(ChecklistSubController::class . '.TITLE', 'Checklist');
             }
-            if ($item->Segment === FollowUpSubController::config()->get('url_segment')) {
-                $item->Title = _t(FollowUpSubController::class . '.TITLE', 'Follow-ups');
+            if ($item->Segment === CommentSubController::config()->get('url_segment')) {
+                $item->Title = _t(CommentSubController::class . '.TITLE', 'Comments');
             }
             if ($item->Segment === CaseDocumentSubController::config()->get('url_segment')) {
                 $item->Title = _t(CaseDocumentSubController::class . '.TITLE', 'Documents');
@@ -666,26 +666,34 @@ abstract class FlowCaseController extends FrontdeskController
         foreach (StatusChange::get()->filter($case) as $change) {
             $entries->push($this->statusChangeEntry($change));
         }
-        foreach (FollowUp::get()->filter($case) as $followUp) {
-            $creator = $followUp->CreatedBy();
+        $comments = Comment::get()->filter(['RecordClass' => $record->ClassName, 'RecordID' => $record->ID]);
+        foreach ($comments as $comment) {
+            $creator = $comment->CreatedBy();
+            $title = $comment->DueDate
+                ? _t(self::class . '.TIMELINE_COMMENT_DATED', '{kind} on {date}: {text}', [
+                    'kind' => $comment->getKindLabel(),
+                    'date' => $comment->getDueLabel(),
+                    'text' => $comment->Text,
+                ])
+                : _t(self::class . '.TIMELINE_COMMENT', '{kind}: {text}', [
+                    'kind' => $comment->getKindLabel(),
+                    'text' => $comment->Text,
+                ]);
             $entries->push(TimelineEntry::create(
-                (string) $followUp->Created,
-                _t(self::class . '.TIMELINE_FOLLOWUP', 'Follow-up on {date}: {text}', [
-                    'date' => $followUp->DueDate ? date('d.m.Y', (int) strtotime((string) $followUp->DueDate)) : '–',
-                    'text' => $followUp->Text,
-                ]),
+                (string) $comment->Created,
+                $title,
                 '',
                 $creator->exists() ? (string) $creator->getName() : '',
-                'followup'
+                'comment'
             ));
-            if ($followUp->IsDone && $followUp->DoneAt) {
-                $doneBy = $followUp->DoneBy();
+            if ($comment->IsDone && $comment->DoneAt) {
+                $doneBy = $comment->DoneBy();
                 $entries->push(TimelineEntry::create(
-                    (string) $followUp->DoneAt,
-                    _t(self::class . '.TIMELINE_FOLLOWUP_DONE', 'Follow-up done: {text}', ['text' => $followUp->Text]),
+                    (string) $comment->DoneAt,
+                    _t(self::class . '.TIMELINE_COMMENT_DONE', 'Done: {text}', ['text' => $comment->Text]),
                     '',
                     $doneBy->exists() ? (string) $doneBy->getName() : '',
-                    'followup'
+                    'comment'
                 ));
             }
         }

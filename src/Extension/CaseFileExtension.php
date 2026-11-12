@@ -12,7 +12,7 @@ use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CaseMail;
 use Atwx\Flow\Model\ChecklistEntry;
 use Atwx\Flow\Model\CustomField;
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\Flow\Model\Note;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Model\StatusChange;
@@ -50,7 +50,7 @@ use SilverStripe\ORM\HasManyList;
  * @method HasManyList<Assignment> FlowAssignments()
  * @method HasManyList<AssignmentChange> FlowAssignmentChanges()
  * @method HasManyList<CaseDocument> FlowDocuments()
- * @method HasManyList<FollowUp> FlowFollowUps()
+ * @method HasManyList<Comment> FlowComments()
  * @method HasManyList<ChecklistEntry> FlowChecklist()
  * @method HasManyList<CaseMail> FlowMails()
  * @extends Extension<DataObject&static>
@@ -72,7 +72,7 @@ class CaseFileExtension extends Extension
         'FlowAssignments' => Assignment::class . '.Case',
         'FlowAssignmentChanges' => AssignmentChange::class . '.Case',
         'FlowDocuments' => CaseDocument::class . '.Case',
-        'FlowFollowUps' => FollowUp::class . '.Case',
+        'FlowComments' => Comment::class . '.Record',
         'FlowChecklist' => ChecklistEntry::class . '.Case',
         'FlowMails' => CaseMail::class . '.Case',
     ];
@@ -87,7 +87,7 @@ class CaseFileExtension extends Extension
         'FlowAssignments',
         'FlowAssignmentChanges',
         'FlowDocuments',
-        'FlowFollowUps',
+        'FlowComments',
         'FlowChecklist',
         'FlowMails',
     ];

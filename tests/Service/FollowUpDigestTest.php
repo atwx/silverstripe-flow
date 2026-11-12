@@ -5,7 +5,7 @@ namespace Atwx\Flow\Tests\Service;
 use Atwx\Flow\Config\ConfigImporter;
 use Atwx\Flow\Controller\FollowUpController;
 use Atwx\Flow\Extension\CaseFileExtension;
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\Flow\Model\Status;
 use Atwx\Flow\Service\FollowUpDigest;
 use Atwx\Flow\Service\MailService;
@@ -59,14 +59,15 @@ class FollowUpDigestTest extends SapphireTest
         return $member;
     }
 
-    private function followUp(string $title, string $due, Member $member, bool $done = false): FollowUp
+    private function followUp(string $title, string $due, Member $member, bool $done = false): Comment
     {
         $course = TestCourse::create(['Title' => $title]);
         $statusID = Status::get()->filter(['Code' => 'draft', 'Workflow.Code' => 'course'])->first()?->ID;
         CaseFileExtension::writeStatus($course, (int) $statusID);
-        $followUp = FollowUp::create([
-            'CaseClass' => TestCourse::class,
-            'CaseID' => $course->ID,
+        $followUp = Comment::create([
+            'Kind' => Comment::FOLLOW_UP,
+            'RecordClass' => TestCourse::class,
+            'RecordID' => $course->ID,
             'Text' => 'Nachfassen',
             'DueDate' => $due,
             'MemberID' => $member->ID,

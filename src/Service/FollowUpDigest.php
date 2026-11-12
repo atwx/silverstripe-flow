@@ -3,7 +3,7 @@
 namespace Atwx\Flow\Service;
 
 use Atwx\Flow\Controller\FollowUpController;
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Psr\Log\LoggerInterface;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\Email\Email;
@@ -13,12 +13,12 @@ use SilverStripe\Security\Member;
 use Throwable;
 
 /**
- * Daily mail to every member with open follow-ups that are due or overdue:
- * one mail per member listing them with links to the case files (sake
+ * Daily mail to every member with open follow-ups and to-dos that are due or
+ * overdue: one mail per member listing them with links to the records (sake
  * flow:followup-digest, run by cron once a day).
  *
- * Left out: follow-ups without a member, case files the member may not view
- * (the case controller's view permission, as in the list of follow-ups),
+ * Left out: entries without a member, records the member may not view
+ * (the record controller's view permission, as in the list of follow-ups),
  * members without a valid address, members who turned the mail off
  * (Member.FlowDigestOff) and members who already got it today.
  */
@@ -29,15 +29,20 @@ class FollowUpDigest
     /**
      * Due follow-ups by member ID.
      *
-     * @return array<int, array{member: Member, followUps: array<int, FollowUp>}>
+     * @return array<int, array{member: Member, followUps: array<int, Comment>}>
      */
     public function due(?string $today = null): array
     {
         $today = $today ?? date('Y-m-d');
         $result = [];
-        $open = FollowUp::get()
-            ->filter(['IsDone' => false, 'DueDate:LessThanOrEqual' => $today, 'MemberID:GreaterThan' => 0])
-            ->sort(['DueDate' => 'ASC', 'ID' => 'ASC']);
+        $open = Comment::get()
+            ->filter([
+                'IsDone' => false,
+                'Kind' => Comment::TASK_KINDS,
+                'DueDate:LessThanOrEqual' => $today,
+                'MemberID:GreaterThan' => 0,
+            ])
+            ->sort(['DueDate' => 'ASC', 'DueTime' => 'ASC', 'ID' => 'ASC']);
         foreach ($open as $followUp) {
             $memberID = (int) $followUp->MemberID;
             if (!isset($result[$memberID])) {
@@ -102,17 +107,18 @@ class FollowUpDigest
     }
 
     /**
-     * @param array<int, FollowUp> $followUps
+     * @param array<int, Comment> $followUps
      */
     public function email(Member $member, array $followUps, string $today): Email
     {
         $lines = [];
         $items = [];
         foreach ($followUps as $followUp) {
-            $case = $followUp->Case();
-            $date = $followUp->dbObject('DueDate')->Format('dd.MM.yyyy');
+            $record = $followUp->Record();
+            $date = $followUp->getDueLabel();
             $overdue = $followUp->DueDate < $today ? ' (' . _t(self::class . '.OVERDUE', 'overdue') . ')' : '';
-            $text = sprintf('%s%s: %s – %s', $date, $overdue, $case->getTitle(), $followUp->Text);
+            $kind = $followUp->Kind === Comment::TODO ? $followUp->getKindLabel() . ': ' : '';
+            $text = sprintf('%s%s: %s – %s%s', $date, $overdue, $record->getTitle(), $kind, $followUp->Text);
             $url = $this->caseUrl($followUp);
             $lines[] = '- ' . $text . ($url ? "\n  " . $url : '');
             $html = htmlspecialchars($text, ENT_QUOTES);
@@ -151,21 +157,15 @@ class FollowUpDigest
      * Same rule as the list of follow-ups: the member may view the list of the
      * case controller (or the case file itself when there is no controller).
      */
-    private function mayView(FollowUp $followUp, Member $member): bool
+    private function mayView(Comment $followUp, Member $member): bool
     {
-        $case = $followUp->Case();
-        if (!$case->exists()) {
-            return false;
-        }
-        $controller = FollowUpController::caseControllerFor($case::class);
-        return $controller ? $controller->canView($member) : $case->canView($member);
+        return $followUp->canView($member);
     }
 
-    private function caseUrl(FollowUp $followUp): ?string
+    private function caseUrl(Comment $followUp): ?string
     {
-        $case = $followUp->Case();
-        $controller = FollowUpController::caseControllerFor($case::class);
-        return $controller ? Director::absoluteURL($controller->Link('view/' . $case->ID)) : null;
+        $link = FollowUpController::recordLink($followUp->Record());
+        return $link ? Director::absoluteURL($link) : null;
     }
 
     /**

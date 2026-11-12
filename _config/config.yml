@@ -11,6 +11,8 @@ SilverStripe\Core\Injector\Injector:
 Atwx\SilverstripeFrontdeskKit\Catalog\Catalogs:
   extensions:
     - Atwx\Flow\Extension\CatalogUsageExtension
+  catalogs:
+    flow_comment_type: { title: 'Kommentartypen' }
 
 SilverStripe\Cli\Sake:
   commands:

@@ -2,40 +2,74 @@
 
 namespace Atwx\Flow\Controller;
 
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use SilverStripe\ORM\DataObject;
 
 /**
- * Columns of follow-up lists (in a case file and in the overview).
+ * Columns of comment lists (in a record and in the overview of follow-ups and to-dos).
  */
 class FollowUpColumns
 {
-    public static function forCaseFile(): ColumnCollection
+    /**
+     * Comments of one record: date, text with kind and member responsible,
+     * author and date, done.
+     */
+    public static function forRecord(): ColumnCollection
     {
-        $labels = FollowUp::singleton()->fieldLabels();
+        $labels = Comment::singleton()->fieldLabels();
         return ColumnCollection::create()
             ->make('DueDate', $labels['DueDate'])->format(self::dueFormatter())->type('html')->end()
-            ->make('Text', $labels['Text'])->end()
-            ->make('Member.Name', $labels['Member.Name'])->end()
+            ->make('Summary', $labels['Text'])->format(self::summaryFormatter())->type('html')->end()
+            ->make('CreatedBy.Name', $labels['CreatedBy'])
+                ->format(fn ($value, DataObject $record) => self::authorLine($record))
+                ->end()
             ->make('IsDone', $labels['IsDone'])
                 ->format(fn ($value) => $value ? _t(self::class . '.YES', 'yes') : '')
                 ->end();
     }
 
     /**
-     * Due date as dd.mm.yyyy, overdue ones highlighted.
+     * Date (and time) as dd.mm.yyyy hh:mm; overdue tasks in red, upcoming dates bold.
      */
     public static function dueFormatter(): callable
     {
         return function ($value, DataObject $record) {
-            if (!$value) {
+            if (!$value || !$record instanceof Comment) {
                 return '';
             }
-            $date = htmlspecialchars(date('d.m.Y', (int) strtotime((string) $value)));
-            return $record instanceof FollowUp && $record->isOverdue()
-                ? '<span class="text-error font-medium">' . $date . '</span>'
-                : $date;
+            $label = htmlspecialchars($record->getDueLabel());
+            if ($record->isOverdue()) {
+                return '<span class="text-error font-medium">' . $label . '</span>';
+            }
+            return $record->isUpcoming() ? '<strong>' . $label . '</strong>' : $label;
         };
+    }
+
+    /**
+     * Text with kind and member responsible in front; important ones bold.
+     */
+    public static function summaryFormatter(): callable
+    {
+        return function ($value, DataObject $record) {
+            if (!$record instanceof Comment) {
+                return '';
+            }
+            $text = nl2br(htmlspecialchars($record->getSummary()), false);
+            return $record->Important
+                ? '<strong>' . $text . '</strong> <span class="badge badge-warning badge-sm">'
+                    . htmlspecialchars(_t(self::class . '.IMPORTANT', 'important')) . '</span>'
+                : $text;
+        };
+    }
+
+    private static function authorLine(DataObject $record): string
+    {
+        if (!$record instanceof Comment) {
+            return '';
+        }
+        $author = $record->CreatedBy();
+        $date = date('d.m.Y', (int) strtotime((string) $record->Created));
+        return $author->exists() ? $author->getName() . ', ' . $date : $date;
     }
 }

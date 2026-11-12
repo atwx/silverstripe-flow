@@ -2,7 +2,7 @@
 
 namespace Atwx\Flow\Service;
 
-use Atwx\Flow\Model\FollowUp;
+use Atwx\Flow\Model\Comment;
 use Atwx\Flow\Model\FollowUpRule;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DataObject;
@@ -11,7 +11,7 @@ use SilverStripe\Security\Member;
 /**
  * Applies the follow-up rules when the status of a case file changes: closes
  * the open follow-ups of rules of the old status (close on leave) and creates
- * those of the new status.
+ * those of the new status (comments of kind follow-up).
  */
 class FollowUpService
 {
@@ -22,9 +22,9 @@ class FollowUpService
         if ($fromID) {
             $leaving = FollowUpRule::get()->filter(['StatusID' => $fromID, 'CloseOnLeave' => true])->column('ID');
             if ($leaving) {
-                $open = FollowUp::get()->filter([
-                    'CaseClass' => $case->ClassName,
-                    'CaseID' => $case->ID,
+                $open = Comment::get()->filter([
+                    'RecordClass' => $case->ClassName,
+                    'RecordID' => $case->ID,
                     'RuleID' => $leaving,
                     'IsDone' => false,
                 ]);
@@ -39,9 +39,10 @@ class FollowUpService
             $member = $responsibility->exists()
                 ? AssignmentService::singleton()->assignee($case, $responsibility)
                 : null;
-            FollowUp::create([
-                'CaseClass' => $case->ClassName,
-                'CaseID' => $case->ID,
+            Comment::create([
+                'Kind' => Comment::FOLLOW_UP,
+                'RecordClass' => $case->ClassName,
+                'RecordID' => $case->ID,
                 'RuleID' => $rule->ID,
                 'Text' => $rule->Title,
                 'DueDate' => date('Y-m-d', (int) strtotime('+' . max(0, (int) $rule->Days) . ' days')),
