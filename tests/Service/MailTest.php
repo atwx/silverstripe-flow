@@ -11,6 +11,7 @@ use Atwx\Flow\Mail\RecipientResolver;
 use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CaseMail;
 use Atwx\Flow\Model\ChecklistEntry;
+use Atwx\Flow\Model\MailDownload;
 use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Model\Status;
@@ -24,6 +25,8 @@ use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
 use Atwx\Flow\Tests\Stubs\TestParticipant;
 use SilverStripe\Assets\Dev\TestAssetStore;
+use SilverStripe\Assets\File;
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
 use SilverStripe\Core\Injector\Injector;
@@ -353,6 +356,75 @@ class MailTest extends SapphireTest
             TestCourse::create(['Title' => 'Importiert'])->write();
         });
         $this->assertNull($this->findEmail('office@example.org'));
+    }
+
+    public function testAttachmentsAsDownloadLinks(): void
+    {
+        $course = $this->course();
+        $template = $this->template('confirmation');
+        $file = File::create();
+        $file->setFromString('Preise 2027', 'flow-mail-files/preisliste.pdf');
+        $file->write();
+        $template->Files()->add($file);
+        $template->AsLinks = true;
+        $template->write();
+
+        $draft = MailService::singleton()->draft($course, $template, $this->olga);
+        $this->assertTrue($draft->asLinks);
+        $this->assertSame([(int) $file->ID], $draft->fileIDs);
+        $mail = MailService::singleton()->send($course, $draft, $this->olga);
+
+        $sent = $this->findEmail('info@example.org', null, 'Bestätigung: Paläographie');
+        $this->assertNotNull($sent);
+        $this->assertSame([], $sent['AttachedFiles']);
+        $this->assertSame(2, $mail->Downloads()->count());
+        $this->assertStringContainsString('Downloads (bis ', $mail->Body);
+        preg_match_all('#flow/download/([0-9a-f]{64})#', $mail->Body, $matches);
+        $this->assertCount(2, $matches[1]);
+        $this->assertStringContainsString($matches[1][1], $sent['Content']);
+
+        // Without login: the template file in its current version, counted.
+        $this->logOut();
+        $file->setFromString('Preise 2028', 'flow-mail-files/preisliste.pdf');
+        $file->write();
+        $response = Director::test('flow/download/' . $matches[1][1]);
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('Preise 2028', $response->getBody());
+        $this->assertStringContainsString(
+            'attachment; filename="preisliste.pdf"',
+            (string) $response->getHeader('Content-Disposition')
+        );
+        $this->assertSame(1, (int) MailDownload::findByToken($matches[1][1])?->Downloads);
+
+        $pdf = Director::test('flow/download/' . $matches[1][0]);
+        $this->assertSame(200, $pdf->getStatusCode());
+        $this->assertSame('application/pdf', $pdf->getHeader('Content-Type'));
+
+        $this->assertSame(404, Director::test('flow/download/' . str_repeat('0', 64))->getStatusCode());
+        $download = MailDownload::findByToken($matches[1][0]);
+        $this->assertNotNull($download);
+        $download->ExpiresAt = '2020-01-01 00:00:00';
+        $download->write();
+        $this->assertSame(410, Director::test('flow/download/' . $matches[1][0])->getStatusCode());
+    }
+
+    public function testTemplateFilesAreAttached(): void
+    {
+        $course = $this->course();
+        $template = $this->template('closed');
+        $file = File::create();
+        $file->setFromString('Infos', 'flow-mail-files/gastfamilien-info.pdf');
+        $file->write();
+        $template->Files()->add($file);
+
+        $draft = MailService::singleton()->draft($course, $template, $this->olga);
+        $mail = MailService::singleton()->send($course, $draft, $this->olga);
+
+        $sent = $this->findEmail('info@example.org', null, 'Abgeschlossen: Paläographie');
+        $this->assertNotNull($sent);
+        $this->assertSame(['gastfamilien-info.pdf'], array_column($sent['AttachedFiles'], 'filename'));
+        $this->assertSame('gastfamilien-info.pdf', $mail->AttachmentNames);
+        $this->assertSame(0, $mail->Downloads()->count());
     }
 
     public function testForEachMustBeAListOfTheCaseFile(): void

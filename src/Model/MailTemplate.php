@@ -2,11 +2,15 @@
 
 namespace Atwx\Flow\Model;
 
+use SilverStripe\AssetAdmin\Forms\UploadField;
+use SilverStripe\Assets\File;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextareaField;
+use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\Versioned\Versioned;
 
 /**
  * Mail template of a workflow: subject and plain-text body with the placeholders
@@ -16,6 +20,10 @@ use SilverStripe\ORM\DataObject;
  * or automatically when the case file enters a status (SendOnStatus); with the
  * initial status also when a case file is created (e.g. a notification about a
  * new application from a public form, with {{Link}} to it).
+ *
+ * Files from the asset library (Files) are attached as they are when the mail
+ * is sent, e.g. the current price list. With AsLinks, all attachments are sent
+ * as download links in the text instead (see MailDownload).
  *
  * With ForEach (a has_many or many_many relation of the case file) one mail is
  * sent per entry of that sub-list: {{Item.<field>}} in the texts and
@@ -30,11 +38,13 @@ use SilverStripe\ORM\DataObject;
  * @property string $ReplyTo
  * @property string $Attachments Comma-separated codes of document templates
  * @property string $ForEach Relation of the case file: one mail per entry
+ * @property bool $AsLinks Attachments as download links in the text
  * @property int $Sort
  * @property int $WorkflowID
  * @property int $SendOnStatusID
  * @method Workflow Workflow()
  * @method Status SendOnStatus()
+ * @method \SilverStripe\ORM\ManyManyList<File> Files()
  */
 class MailTemplate extends DataObject
 {
@@ -52,7 +62,16 @@ class MailTemplate extends DataObject
         'ReplyTo' => 'Varchar(255)',
         'Attachments' => 'Varchar(255)',
         'ForEach' => 'Varchar(100)',
+        'AsLinks' => 'Boolean',
         'Sort' => 'Int',
+    ];
+
+    private static array $many_many = [
+        'Files' => File::class,
+    ];
+
+    private static array $owns = [
+        'Files',
     ];
 
     private static array $has_one = [
@@ -93,6 +112,23 @@ class MailTemplate extends DataObject
     }
 
     /**
+     * Files of the template in their latest version (draft stage: files
+     * uploaded to the unversioned template are not published).
+     *
+     * @return array<int, File>
+     */
+    public function attachedFiles(): array
+    {
+        if (!$this->isInDB()) {
+            return [];
+        }
+        return Versioned::withVersionedMode(function () {
+            Versioned::set_stage(Versioned::DRAFT);
+            return $this->Files()->toArray();
+        });
+    }
+
+    /**
      * Document templates whose PDFs are attached.
      *
      * @return array<int, DocumentTemplate>
@@ -115,6 +151,8 @@ class MailTemplate extends DataObject
         $labels = parent::fieldLabels($includerelations);
         $labels['SendOnStatus.Title'] = _t(self::class . '.has_one_SendOnStatus', 'Send automatically on');
         $labels['ForEach'] = _t(self::class . '.db_ForEach', 'One mail per entry of');
+        $labels['AsLinks'] = _t(self::class . '.db_AsLinks', 'Attachments as download links');
+        $labels['Files'] = _t(self::class . '.many_many_Files', 'Files');
         return $labels;
     }
 
@@ -144,6 +182,19 @@ class MailTemplate extends DataObject
         $fields->dataFieldByName('Attachments')?->setDescription(_t(
             self::class . '.ATTACHMENTS_DESCRIPTION',
             'Codes of document templates, comma-separated: their PDFs are created and attached.'
+        ));
+        $fields->removeByName('Files');
+        $filesField = class_exists(UploadField::class)
+            ? UploadField::create('Files', $this->fieldLabel('Files'))->setFolderName('flow-mail-files')
+            : TreeMultiselectField::create('Files', $this->fieldLabel('Files'), File::class);
+        $fields->insertAfter('Attachments', $filesField->setDescription(_t(
+            self::class . '.FILES_DESCRIPTION',
+            'Attached as they are when the mail is sent; replace a file here to send its new version.'
+        )));
+        $fields->dataFieldByName('AsLinks')?->setDescription(_t(
+            self::class . '.AS_LINKS_DESCRIPTION',
+            'PDFs and files are not attached: the mail gets a download link for each (valid for {days} days).',
+            ['days' => (int) MailDownload::config()->get('valid_days')]
         ));
         $fields->dataFieldByName('ForEach')?->setDescription(_t(
             self::class . '.FOR_EACH_DESCRIPTION',

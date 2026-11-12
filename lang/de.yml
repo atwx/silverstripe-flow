@@ -338,6 +338,7 @@ de:
     FILE_MISSING: 'fehlt'
     TITLE: 'Checkliste'
   Atwx\Flow\Controller\CaseMailSubController:
+    AS_LINKS: 'Als Download-Links statt als Anhang senden'
     ENTRIES: 'Je eine Mail an'
     NO_ADDRESS: 'keine gültige Adresse'
     NO_ENTRIES: 'Die Liste ist leer.'
@@ -381,6 +382,10 @@ de:
     has_one_Member: 'Von'
   Atwx\Flow\Model\MailTemplate:
     db_ForEach: 'Eine Mail je Eintrag von'
+    db_AsLinks: 'Anhänge als Download-Links'
+    many_many_Files: 'Dateien'
+    FILES_DESCRIPTION: 'Werden beim Versand so angehängt, wie sie dann sind; eine hier ersetzte Datei geht in der neuen Fassung raus.'
+    AS_LINKS_DESCRIPTION: 'PDFs und Dateien werden nicht angehängt: Die Mail enthält für jede einen Download-Link ({days} Tage gültig).'
     FOR_EACH_DESCRIPTION: 'Optional: eine Unterliste der Akte (Name der Relation, z. B. Registrations). Je Eintrag wird eine Mail gesendet; {{Item.Feld}} und Item.Email (Empfänger) beziehen sich auf den Eintrag.'
     FOR_EACH_UNKNOWN: '„{relation}“ ist keine Liste der Akte.'
     SINGULARNAME: 'Mailvorlage'
@@ -405,3 +410,12 @@ de:
     RECIPIENTS_REQUIRED: 'Automatische Mails brauchen Empfänger.'
   Atwx\Flow\Service\MailService:
     NO_RECIPIENTS: 'Es gibt keine Empfänger.'
+    LINK: 'Link'
+    LINKS: 'Downloads:'
+    LINKS_UNTIL: 'Downloads (bis {date}):'
+  Atwx\Flow\Controller\MailDownloadController:
+    NOT_FOUND: 'Diesen Download gibt es nicht (mehr).'
+    EXPIRED: 'Dieser Download-Link ist abgelaufen. Bitte fragen Sie beim Absender nach einem neuen.'
+  Atwx\Flow\Model\MailDownload:
+    SINGULARNAME: Download
+    PLURALNAME: Downloads

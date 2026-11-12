@@ -232,6 +232,9 @@ class ConfigExporter
             if ($attach) {
                 $entry['attach'] = $attach;
             }
+            if ($template->AsLinks) {
+                $entry['links'] = true;
+            }
             $status = $template->SendOnStatus();
             if ($status->exists()) {
                 $entry['send_on'] = $status->Code;

@@ -7,10 +7,12 @@ use Atwx\Flow\Mail\RecipientResolver;
 use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\CaseMail;
 use Atwx\Flow\Model\DocumentTemplate;
+use Atwx\Flow\Model\MailDownload;
 use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Model\StatusChange;
 use Atwx\Flow\Model\Workflow;
 use Psr\Log\LoggerInterface;
+use SilverStripe\Assets\File;
 use SilverStripe\Control\Email\Email;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injectable;
@@ -18,6 +20,7 @@ use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Model\List\SS_List;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Member;
+use SilverStripe\Versioned\Versioned;
 use Throwable;
 
 /**
@@ -114,6 +117,8 @@ class MailService
         foreach ($template->attachmentTemplates() as $documentTemplate) {
             $draft->documentTemplateIDs[] = (int) $documentTemplate->ID;
         }
+        $draft->fileIDs = array_map(fn (File $file) => (int) $file->ID, $template->attachedFiles());
+        $draft->asLinks = (bool) $template->AsLinks;
         return $draft;
     }
 
@@ -155,6 +160,8 @@ class MailService
                 $draft->body = $placeholders->replace($base->body, $case, $by, false, $item);
                 $draft->cc = $base->cc;
                 $draft->replyTo = $base->replyTo;
+                $draft->fileIDs = $base->fileIDs;
+                $draft->asLinks = $base->asLinks;
             }
             $draft->documentTemplateIDs = [];
             $draft->documentIDs = $documentIDs;
@@ -175,7 +182,7 @@ class MailService
                 throw new \RuntimeException(_t(self::class . '.NO_RECIPIENTS', 'There are no recipients.'));
             }
             $names = [];
-            $email = $this->email($case, $draft, $by, $names);
+            $email = $this->email($case, $draft, $by, $names, $mail);
             $mail->AttachmentNames = implode(', ', $names);
             $email->send();
             $mail->Mode = CaseMail::SENT;
@@ -201,7 +208,7 @@ class MailService
     {
         $mail = $this->record($case, $draft, $by, false);
         $names = [];
-        $email = $this->email($case, $draft, $by, $names);
+        $email = $this->email($case, $draft, $by, $names, $mail);
         // Opened as a draft by mail programs that support it (Outlook, Thunderbird).
         $email->getHeaders()->addTextHeader('X-Unsent', '1');
         $mail->AttachmentNames = implode(', ', $names);
@@ -267,18 +274,60 @@ class MailService
 
     /**
      * The mail with its attachments: new PDFs of the chosen document templates
-     * (stored as documents of the case file) and chosen existing documents.
+     * (stored as documents of the case file), chosen existing documents and
+     * files of the template. With $draft->asLinks they are not attached: the
+     * text gets a download link for each (the mail record is written first,
+     * the links belong to it, and its body keeps the links).
      *
      * @param array<int, string> $names Set to the attachment names
      */
-    private function email(DataObject $case, MailDraft $draft, ?Member $by, array &$names = []): Email
+    private function email(DataObject $case, MailDraft $draft, ?Member $by, array &$names, CaseMail $mail): Email
     {
         $names = [];
+        $documentList = [];
+        $documents = DocumentService::singleton();
+        foreach ($draft->documentTemplateIDs as $id) {
+            $template = DocumentTemplate::get()->byID($id);
+            if ($template) {
+                $documentList[] = $documents->create($case, $template, $by);
+            }
+        }
+        foreach ($draft->documentIDs as $id) {
+            $document = CaseDocument::get()->filter([
+                'ID' => $id,
+                'CaseClass' => $case->ClassName,
+                'CaseID' => $case->ID,
+            ])->first();
+            if ($document) {
+                $documentList[] = $document;
+            }
+        }
+        $files = $draft->fileIDs ? Versioned::withVersionedMode(function () use ($draft) {
+            Versioned::set_stage(Versioned::DRAFT);
+            return File::get()->filter('ID', $draft->fileIDs)->toArray();
+        }) : [];
+
+        $body = $draft->body;
+        $links = [];
+        if ($draft->asLinks && ($documentList || $files)) {
+            if (!$mail->isInDB()) {
+                $mail->write();
+            }
+            foreach ($documentList as $document) {
+                $links[] = MailDownload::createFor($mail, $document, null);
+            }
+            foreach ($files as $file) {
+                $links[] = MailDownload::createFor($mail, null, $file);
+            }
+            $body = rtrim($body) . "\n\n" . $this->linkBlock($links);
+            $mail->Body = $body;
+        }
+
         $email = Email::create()
             ->setTo($draft->to)
             ->setSubject($draft->subject)
-            ->text($draft->body)
-            ->html(nl2br(htmlspecialchars($draft->body, ENT_QUOTES), false));
+            ->text($body)
+            ->html(nl2br(htmlspecialchars($body, ENT_QUOTES), false));
         $from = (string) (static::config()->get('from') ?: Email::config()->get('admin_email'));
         if ($from !== '') {
             $email->setFrom($from);
@@ -289,26 +338,47 @@ class MailService
         if ($draft->replyTo !== '') {
             $email->setReplyTo($draft->replyTo);
         }
-        $documents = DocumentService::singleton();
-        foreach ($draft->documentTemplateIDs as $id) {
-            $template = DocumentTemplate::get()->byID($id);
-            if (!$template) {
-                continue;
+        if ($links) {
+            foreach ($links as $link) {
+                $names[] = $link->Title . ' (' . _t(self::class . '.LINK', 'link') . ')';
             }
-            $document = $documents->create($case, $template, $by);
+            return $email;
+        }
+        foreach ($documentList as $document) {
             $names[] = $this->attach($email, $document);
         }
-        foreach ($draft->documentIDs as $id) {
-            $document = CaseDocument::get()->filter([
-                'ID' => $id,
-                'CaseClass' => $case->ClassName,
-                'CaseID' => $case->ID,
-            ])->first();
-            if ($document) {
-                $names[] = $this->attach($email, $document);
+        foreach ($files as $file) {
+            if ($file->File->exists()) {
+                $email->addAttachmentFromData(
+                    (string) $file->getString(),
+                    (string) $file->Name,
+                    $file->getMimeType() ?: 'application/octet-stream'
+                );
+                $names[] = (string) $file->Name;
             }
         }
         return $email;
+    }
+
+    /**
+     * Text block with the download links of a mail.
+     *
+     * @param array<int, MailDownload> $links
+     */
+    private function linkBlock(array $links): string
+    {
+        $expires = $links[0]->ExpiresAt ?? null;
+        $lines = [$expires
+            ? _t(
+                self::class . '.LINKS_UNTIL',
+                'Downloads (until {date}):',
+                ['date' => date('d.m.Y', (int) strtotime((string) $expires))]
+            )
+            : _t(self::class . '.LINKS', 'Downloads:')];
+        foreach ($links as $link) {
+            $lines[] = '- ' . $link->Title . ': ' . $link->url();
+        }
+        return implode("\n", $lines) . "\n";
     }
 
     private function attach(Email $email, CaseDocument $document): string

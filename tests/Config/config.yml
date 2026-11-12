@@ -131,6 +131,7 @@ workflows:
         to: Item.Email
         cc: Me
         body: "Hallo {{Item.Name}},\nder Kurs {{Title}} findet in {{Venue}} statt."
+        links: true
     permissions:
       - group: basics
         role: organisers

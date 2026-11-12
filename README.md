@@ -373,6 +373,11 @@ Each template has the following parts:
   `updateFlowMailRecipients(string $token, array &$addresses)`.
 - **Attachments:** codes of document templates. Their PDFs are created and
   attached, and they are also kept as documents of the case file.
+- **Files:** files from the asset library (CMS only, not in the YAML file),
+  attached as they are at sending time, e.g. the current price list. Replacing
+  a file in the CMS sends its new version from then on.
+- **Download links:** with `links: true` PDFs and files are not attached; the
+  text gets a download link for each instead (see below).
 - **Automatic sending:** `send_on` sends the mail when the case file enters that
   status. The mail goes out after the status change, as the actor (the member, or
   nobody for an edit link).
@@ -453,6 +458,26 @@ saved without them).
   automatic mails for that time.
 - The mail is sent right after the first write. Records of sub-lists that are
   written afterwards are not in it yet.
+
+**Download links instead of attachments:** with `links: true` (CMS:
+*Anhänge als Download-Links*; the mail form can switch it per mail) the mail
+ends with a block of links:
+
+```
+Downloads (bis 12.12.2026):
+- Preisliste: https://example.org/flow/download/<token>
+- Reisebrief Anna: https://example.org/flow/download/<token>
+```
+
+- A link opens without login at `flow/download/<token>` and stays valid for
+  `MailDownload.valid_days` days (default 30; 0: no expiry). Expired links
+  answer 410, unknown ones 404.
+- Only a hash of the token is stored (`MailDownload`, one per file, deleted
+  with the mail). Downloads are counted (`Downloads`, `LastDownloadAt`).
+- A file of the template is served in its current version, so a corrected
+  file reaches whoever downloads it later. Documents of the case file are
+  served as created.
+- The recorded mail keeps the text with the links.
 
 **Record of every mail:** each mail is kept as `CaseMail` with its full text.
 It appears in the sub-list *Mails* and in the timeline as sent, not sent or

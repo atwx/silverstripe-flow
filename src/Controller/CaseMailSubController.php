@@ -15,6 +15,7 @@ use Atwx\SilverstripeFrontdeskKit\Table\RowAction;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Validation\ValidationResult;
+use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
@@ -159,6 +160,11 @@ class CaseMailSubController extends FrontdeskSubController
                 $attachments['doc-' . $document->ID] = (string) $document->Title;
             }
         }
+        if ($template) {
+            foreach ($template->attachedFiles() as $file) {
+                $attachments['file-' . $file->ID] = (string) $file->getTitle();
+            }
+        }
 
         $hint = _t(self::class . '.ADDRESS_HINT', 'Several addresses separated by commas.');
         $forEach = $case && $template && $template->forEachRelation() !== null;
@@ -174,6 +180,10 @@ class CaseMailSubController extends FrontdeskSubController
         );
         if ($attachments) {
             $fields->push(CheckboxSetField::create('Attachments', $labels['AttachmentNames'], $attachments));
+            $fields->push(CheckboxField::create(
+                'AsLinks',
+                _t(self::class . '.AS_LINKS', 'Send as download links instead of attachments')
+            ));
         }
         $actions = FieldList::create(FormAction::create('doSend', _t(self::class . '.SEND', 'Send')));
         if (!$forEach) {
@@ -206,7 +216,8 @@ class CaseMailSubController extends FrontdeskSubController
                 'ReplyTo' => $draft->replyTo,
                 'Subject' => $draft->subject,
                 'Body' => $draft->body,
-                'Attachments' => array_map(fn ($id) => 'tpl-' . $id, $draft->documentTemplateIDs),
+                'Attachments' => $this->attachmentKeys($draft),
+                'AsLinks' => $draft->asLinks,
             ]);
         }
         return $form;
@@ -282,7 +293,8 @@ class CaseMailSubController extends FrontdeskSubController
             'ReplyTo' => $base->replyTo,
             'Subject' => (string) $template->Subject,
             'Body' => (string) $template->Body,
-            'Attachments' => array_map(fn ($id) => 'tpl-' . $id, $base->documentTemplateIDs),
+            'Attachments' => $this->attachmentKeys($base),
+            'AsLinks' => $base->asLinks,
         ]);
     }
 
@@ -413,8 +425,11 @@ class CaseMailSubController extends FrontdeskSubController
                 $draft->documentTemplateIDs[] = (int) $m[1];
             } elseif (preg_match('/^doc-(\d+)$/', (string) $key, $m)) {
                 $draft->documentIDs[] = (int) $m[1];
+            } elseif (preg_match('/^file-(\d+)$/', (string) $key, $m)) {
+                $draft->fileIDs[] = (int) $m[1];
             }
         }
+        $draft->asLinks = !empty($data['AsLinks']);
         if ($errors) {
             foreach ($errors as $field => $message) {
                 $form->sessionMessage($message, 'bad');
@@ -422,6 +437,15 @@ class CaseMailSubController extends FrontdeskSubController
             }
             $form->setSessionData($data);
             return null;
+        }
+        // Only files of the template.
+        if ($draft->fileIDs) {
+            $draft->fileIDs = $template
+                ? array_values(array_intersect(
+                    $draft->fileIDs,
+                    array_map(fn ($file) => (int) $file->ID, $template->attachedFiles())
+                ))
+                : [];
         }
         // Only document templates of the case file's workflow.
         if ($draft->documentTemplateIDs) {
@@ -431,6 +455,19 @@ class CaseMailSubController extends FrontdeskSubController
             ])->column('ID');
         }
         return $draft;
+    }
+
+    /**
+     * Keys of the attachment checkboxes preselected from a draft.
+     *
+     * @return array<int, string>
+     */
+    private function attachmentKeys(MailDraft $draft): array
+    {
+        return array_merge(
+            array_map(fn ($id) => 'tpl-' . $id, $draft->documentTemplateIDs),
+            array_map(fn ($id) => 'file-' . $id, $draft->fileIDs)
+        );
     }
 
     private function requestedTemplate(): ?MailTemplate

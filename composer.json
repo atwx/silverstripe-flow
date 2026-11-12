@@ -38,7 +38,8 @@
         "phpunit/phpunit": "^11.3",
         "cambis/silverstan": "^2",
         "phpstan/extension-installer": "^1.4",
-        "squizlabs/php_codesniffer": "^3.7"
+        "squizlabs/php_codesniffer": "^3.7",
+        "silverstripe/asset-admin": "^3"
     },
     "autoload": {
         "psr-4": {
@@ -70,6 +71,7 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "suggest": {
-        "atwx/silverstripe-headless-pdf": "PDF documents from templates (default PdfRenderer)"
+        "atwx/silverstripe-headless-pdf": "PDF documents from templates (default PdfRenderer)",
+        "silverstripe/asset-admin": "Upload field for the files of mail templates in the CMS"
     }
 }
