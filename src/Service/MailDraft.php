@@ -52,6 +52,18 @@ class MailDraft
     public array $documentIDs = [];
 
     /**
+     * Files of the mail template (asset library) to attach.
+     *
+     * @var array<int, int>
+     */
+    public array $fileIDs = [];
+
+    /**
+     * Send the attachments as download links in the text instead of attaching them.
+     */
+    public bool $asLinks = false;
+
+    /**
      * The sub-list entry of a template with ForEach (recorded with the mail).
      */
     public ?DataObject $item = null;

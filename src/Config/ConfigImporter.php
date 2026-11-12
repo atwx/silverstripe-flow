@@ -341,6 +341,7 @@ class ConfigImporter
             }
         }
         $template->Attachments = implode(',', array_map('strval', $attach));
+        $template->AsLinks = (bool) ($definition['links'] ?? false);
         $template->SendOnStatusID = isset($definition['send_on'])
             ? $this->status($workflow, (string) $definition['send_on'], $path)->ID
             : 0;

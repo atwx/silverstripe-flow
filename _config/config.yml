@@ -32,3 +32,4 @@ After:
 SilverStripe\Control\Director:
   rules:
     'flow/link': Atwx\Flow\Controller\AccessLinkController
+    'flow/download': Atwx\Flow\Controller\MailDownloadController

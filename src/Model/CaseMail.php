@@ -32,6 +32,7 @@ use SilverStripe\Security\Security;
  * @method DataObject Item()
  * @method MailTemplate Template()
  * @method Member Member()
+ * @method \SilverStripe\ORM\HasManyList<MailDownload> Downloads()
  */
 class CaseMail extends DataObject
 {
@@ -58,6 +59,14 @@ class CaseMail extends DataObject
         'Template' => MailTemplate::class,
         'Member' => Member::class,
         'Item' => DataObject::class,
+    ];
+
+    private static array $has_many = [
+        'Downloads' => MailDownload::class,
+    ];
+
+    private static array $cascade_deletes = [
+        'Downloads',
     ];
 
     private static array $summary_fields = [
