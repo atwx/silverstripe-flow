@@ -202,6 +202,9 @@ class ConfigExporter
             if ($status->exists()) {
                 $entry['required_before'] = $status->Code;
             }
+            if ($item->hasFile()) {
+                $entry['file'] = (string) $item->FileMode;
+            }
             $checklist[] = $entry;
         }
         if ($checklist) {

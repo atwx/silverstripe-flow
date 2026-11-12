@@ -3,6 +3,7 @@
 namespace Atwx\Flow\Model;
 
 use SilverStripe\Core\Validation\ValidationResult;
+use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\ORM\DataObject;
 
@@ -29,6 +30,7 @@ class ChecklistItem extends DataObject
         'Code' => 'Varchar(64)',
         'Title' => 'Varchar(255)',
         'Sort' => 'Int',
+        'FileMode' => "Enum('none,optional,required', 'none')",
     ];
 
     private static array $has_one = [
@@ -57,7 +59,25 @@ class ChecklistItem extends DataObject
     {
         $labels = parent::fieldLabels($includerelations);
         $labels['RequiredBefore.Title'] = _t(self::class . '.has_one_RequiredBefore', 'Required before');
+        $labels['FileMode'] = _t(self::class . '.db_FileMode', 'File');
         return $labels;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function fileModeOptions(): array
+    {
+        return [
+            'none' => _t(self::class . '.FILE_NONE', 'no file'),
+            'optional' => _t(self::class . '.FILE_OPTIONAL', 'file optional'),
+            'required' => _t(self::class . '.FILE_REQUIRED', 'file required when done'),
+        ];
+    }
+
+    public function hasFile(): bool
+    {
+        return in_array((string) $this->FileMode, ['optional', 'required'], true);
     }
 
     public function getCMSFields(): FieldList
@@ -65,6 +85,11 @@ class ChecklistItem extends DataObject
         $fields = parent::getCMSFields();
         $fields->removeByName(['WorkflowID']);
         $this->lockCode($fields);
+        $fields->replaceField('FileMode', DropdownField::create(
+            'FileMode',
+            $this->fieldLabel('FileMode'),
+            self::fileModeOptions()
+        ));
         return $fields;
     }
 

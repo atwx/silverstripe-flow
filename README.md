@@ -314,11 +314,20 @@ An item can be required before a status: the case file cannot enter it until
 the item is done or not needed (the status change is refused with the list of
 missing items).
 
+An item can take a file (`file: optional` or `file: required`): the entry form
+gets an upload field (frontdesk-kit `FileUploadField`), the list links the file.
+With `required` the entry can only be marked *erledigt* with a file (*nicht
+nötig* needs none). Files are stored protected and downloaded through the
+checklist of the case file (`checklist/<case ID>/file/<entry ID>/FileID`), so
+only members who may see the case file get them; they are deleted with the
+entry and the case file.
+
 ```yaml
     checklist:
       - code: health_form
         title: Health Form
         required_before: placed
+        file: required
 ```
 
 ## Edit links

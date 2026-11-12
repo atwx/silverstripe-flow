@@ -302,6 +302,11 @@ class ConfigImporter
         $item->RequiredBeforeID = isset($definition['required_before'])
             ? $this->status($workflow, (string) $definition['required_before'], $path)->ID
             : 0;
+        $file = (string) ($definition['file'] ?? 'none');
+        if (!array_key_exists($file, ChecklistItem::fileModeOptions())) {
+            throw new ConfigException("{$path} ({$code}): file must be optional, required or none.");
+        }
+        $item->FileMode = $file;
         $item->Sort = $index + 1;
         $this->save($item, "{$path} ({$code})");
     }

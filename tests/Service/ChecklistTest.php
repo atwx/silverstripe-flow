@@ -13,7 +13,13 @@ use Atwx\Flow\Service\TransitionService;
 use Atwx\Flow\Tests\Stubs\TestApplication;
 use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
+use Atwx\SilverstripeFrontdeskKit\Forms\FileUploadField;
+use SilverStripe\Assets\Dev\TestAssetStore;
+use SilverStripe\Assets\File;
+use SilverStripe\Assets\Storage\AssetStore;
+use SilverStripe\Assets\Upload_Validator;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Validation\ValidationException;
 use SilverStripe\Control\HTTPResponse_Exception;
 use SilverStripe\Control\Session;
 use SilverStripe\Dev\SapphireTest;
@@ -47,6 +53,51 @@ class ChecklistTest extends SapphireTest
         $member->Groups()->add($group);
         Permission::grant($group->ID, TestCourseController::singleton()->getPermissionCode('EDIT'));
         $this->logInAs($member);
+        TestAssetStore::activate('ChecklistTest');
+        Upload_Validator::config()->set('use_is_uploaded_file', false);
+    }
+
+    protected function tearDown(): void
+    {
+        $_FILES = [];
+        TestAssetStore::reset();
+        parent::tearDown();
+    }
+
+    private function entry(TestCourse $course, string $code): ChecklistEntry
+    {
+        $this->sub($course)->Items();
+        $entry = ChecklistEntry::get()->filter(['CaseID' => $course->ID, 'Item.Code' => $code])->first();
+        $this->assertNotNull($entry);
+        return $entry;
+    }
+
+    /**
+     * Sub-controller handling a POST of the edit form for an entry.
+     *
+     * @param array<string, mixed> $post
+     */
+    private function postSub(TestCourse $course, array $post): ChecklistSubController
+    {
+        $sub = $this->sub($course);
+        $request = new HTTPRequest('POST', 'test-courses/checklist/' . $course->ID . '/EditForm', [], $post);
+        $request->setSession(new Session([]));
+        $sub->setRequest($request);
+        (new \ReflectionProperty($sub, 'action'))->setValue($sub, 'EditForm');
+        return $sub;
+    }
+
+    private function upload(string $field, string $name): void
+    {
+        $path = (string) tempnam(sys_get_temp_dir(), 'flow');
+        file_put_contents($path, "%PDF-1.4\n%test\n");
+        $_FILES[$field] = [
+            'name' => $name,
+            'type' => 'application/pdf',
+            'tmp_name' => $path,
+            'error' => UPLOAD_ERR_OK,
+            'size' => 16,
+        ];
     }
 
     private function courseIn(string $status): TestCourse
@@ -118,5 +169,73 @@ class ChecklistTest extends SapphireTest
         }
         $course->delete();
         $this->assertSame(0, ChecklistEntry::get()->count());
+    }
+
+    public function testRequiredFileIsNeededToMarkTheEntryDone(): void
+    {
+        $entry = $this->entry($this->courseIn('draft'), 'certificate');
+        $entry->State = 'done';
+        try {
+            $entry->write();
+            $this->fail('expected a validation error');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('Teilnahmebescheinigungen', $e->getMessage());
+        }
+        $entry->State = 'not_needed';
+        $entry->write();
+        $this->assertSame('not_needed', ChecklistEntry::get()->byID($entry->ID)?->State);
+    }
+
+    public function testFileFieldOnlyForItemsWithAFile(): void
+    {
+        $course = $this->courseIn('draft');
+        $room = $this->entry($course, 'room');
+        $certificate = $this->entry($course, 'certificate');
+
+        $fields = $this->postSub($course, ['ID' => $room->ID])->EditForm()->Fields();
+        $this->assertNull($fields->dataFieldByName('FileID'));
+        $this->assertNotNull($fields->dataFieldByName('ItemTitle'));
+
+        $fields = $this->postSub($course, ['ID' => $certificate->ID])->EditForm()->Fields();
+        $this->assertInstanceOf(FileUploadField::class, $fields->dataFieldByName('FileID'));
+    }
+
+    public function testUploadedFileIsProtectedAndOnlyDownloadedThroughItsCaseFile(): void
+    {
+        $course = $this->courseIn('draft');
+        $entry = $this->entry($course, 'certificate');
+        $other = $this->courseIn('draft');
+        $post = ['ID' => $entry->ID, 'State' => 'done', 'Comment' => 'da', 'CaseID' => $other->ID];
+        $this->upload('FileID', 'bescheinigung.pdf');
+
+        $sub = $this->postSub($course, $post);
+        $form = $sub->EditForm();
+        $form->loadDataFrom($post);
+        $sub->save($post, $form);
+
+        $entry = ChecklistEntry::get()->byID($entry->ID);
+        $this->assertNotNull($entry);
+        $this->assertSame('done', $entry->State);
+        $this->assertSame((int) $course->ID, (int) $entry->CaseID, 'a posted CaseID is ignored');
+        $file = $entry->File();
+        $this->assertTrue($file->exists());
+        $this->assertSame(AssetStore::VISIBILITY_PROTECTED, $file->getVisibility());
+
+        $download = function (TestCourse $parent) use ($entry) {
+            $sub = $this->sub($parent);
+            $request = new HTTPRequest('GET', 'x');
+            $request->setRouteParams(['ID' => $entry->ID, 'OtherID' => 'FileID']);
+            return $sub->file($request);
+        };
+        $this->assertStringStartsWith('%PDF', $download($course)->getBody());
+        try {
+            $download($other);
+            $this->fail('expected 404 through another case file');
+        } catch (HTTPResponse_Exception $e) {
+            $this->assertSame(404, $e->getResponse()->getStatusCode());
+        }
+
+        $course->delete();
+        $this->assertNull(File::get()->byID($file->ID), 'the file goes with the case file');
     }
 }
