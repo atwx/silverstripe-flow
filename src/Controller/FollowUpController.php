@@ -145,5 +145,4 @@ class FollowUpController extends FrontdeskController
             }),
         ];
     }
-
 }
