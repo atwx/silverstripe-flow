@@ -625,6 +625,7 @@ Atwx\Flow\Api\ApiResources:
     family:
       class: App\Models\Family
       get: true                          # GET flow-api/family/<id>
+      key: Number                        # optional: GET flow-api/family/<Number> instead
       fields:
         id: ID
         surname: Surname                 # database field
@@ -641,6 +642,11 @@ Atwx\Flow\Api\ApiResources:
       fields: { id: ID, name: Name }
 ```
 
+- **Key:** with `key: <field>`, `GET flow-api/<resource>/<value>` finds the
+  record by that database field (exact, case-sensitive) instead of the ID. It
+  answers 404 unless exactly one record matches, so the field should be unique.
+  File URLs keep the ID. Use it when the client only knows another number, and
+  keep `list` off so the client cannot enumerate records.
 - **Requests:** `GET flow-api/<resource>/<id>`, `GET flow-api/<resource>` and
   `GET flow-api/file/<resource>/<id>/<field>`. A list answers
   `{total, limit, offset, items}`; `limit` is at most 500
@@ -656,7 +662,7 @@ Atwx\Flow\Api\ApiResources:
   Getters are only called when they are listed, and nesting stops after
   `ApiResources.max_depth` levels (default 6).
 
-
+## Extension points
 
 | Hook | Where | Use |
 |---|---|---|

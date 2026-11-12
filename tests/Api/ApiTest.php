@@ -61,6 +61,13 @@ class ApiTest extends SapphireTest
                 'params' => ['CourseID'],
                 'fields' => ['name' => 'Name', 'course' => ['relation' => 'Course', 'resource' => 'courseref']],
             ],
+            'person' => [
+                'class' => TestParticipant::class,
+                'get' => true,
+                'key' => 'Name',
+                'filter' => ['Email:GreaterThan' => ''],
+                'fields' => ['name' => 'Name'],
+            ],
             'courseref' => ['class' => TestCourse::class, 'fields' => ['id' => 'ID']],
             'document' => [
                 'class' => CaseDocument::class,
@@ -150,5 +157,19 @@ class ApiTest extends SapphireTest
 
         Environment::setEnv('FLOW_API_TOKEN', '');
         $this->assertSame(404, $this->get('flow-api/course/' . $this->course->ID)->getStatusCode(), 'API off');
+    }
+
+    public function testGetByKeyField(): void
+    {
+        $this->assertSame(['name' => 'Ruth'], $this->json($this->get('flow-api/person/Ruth')));
+        $this->assertSame(404, $this->get('flow-api/person/ruth')->getStatusCode(), 'case-sensitive');
+        $this->assertSame(404, $this->get('flow-api/person/Karl')->getStatusCode(), 'fixed filter applies');
+        $ruth = TestParticipant::get()->find('Name', 'Ruth');
+        $this->assertNotNull($ruth);
+        $this->assertSame(404, $this->get('flow-api/person/' . $ruth->ID)->getStatusCode(), 'not by ID');
+
+        TestParticipant::create(['Name' => 'Ruth', 'Email' => 'ruth2@example.org'])->write();
+        $this->assertSame(404, $this->get('flow-api/person/Ruth')->getStatusCode(), 'ambiguous');
+        $this->assertSame(404, $this->get('flow-api/course/abc')->getStatusCode(), 'ID must be numeric');
     }
 }
