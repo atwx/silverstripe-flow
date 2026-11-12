@@ -5,6 +5,8 @@ namespace Atwx\Flow\Controller;
 use Atwx\Flow\Model\ChecklistEntry;
 use Atwx\Flow\Service\ChecklistService;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskSubController;
+use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
+use Atwx\SilverstripeFrontdeskKit\Forms\RecordFiles;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\RowAction;
 use SilverStripe\Control\HTTPRequest;
@@ -61,7 +63,46 @@ class ChecklistSubController extends FrontdeskSubController
             ->make('Date', $labels['Date'])
                 ->format(fn ($value) => $value ? date('d.m.Y', (int) strtotime((string) $value)) : '')
                 ->end()
-            ->make('Comment', $labels['Comment'])->end();
+            ->make('Comment', $labels['Comment'])->end()
+            ->make('FileID', $labels['File'])
+                ->format(fn ($value, DataObject $record) => $this->fileCell($record))
+                ->type('html')
+                ->end();
+    }
+
+    private function fileCell(DataObject $record): string
+    {
+        if (!$record instanceof ChecklistEntry || $record->fileMode() === 'none') {
+            return '';
+        }
+        $file = RecordFiles::fileOf($record, 'File');
+        if (!$file) {
+            if ($record->fileMode() !== 'required') {
+                return '';
+            }
+            $missing = htmlspecialchars(_t(self::class . '.FILE_MISSING', 'missing'));
+            return '<span class="text-base-content/60">' . $missing . '</span>';
+        }
+        return '<a class="link" href="' . htmlspecialchars($this->fileLink($record, 'FileID'), ENT_QUOTES)
+            . '" target="_blank" rel="noopener">' . htmlspecialchars((string) $file->Name) . '</a>';
+    }
+
+    /**
+     * State, date, comment and (for items with a file) the file are editable; all
+     * other fields are locked, also against a manipulated POST.
+     */
+    protected function defineFieldLayout(?DataObject $record): ?FieldLayout
+    {
+        $hasFile = $record instanceof ChecklistEntry && $record->fileMode() !== 'none';
+        return FieldLayout::create()
+            ->setDefaultLevel(FieldLayout::HIDDEN)
+            ->setLevels([
+                'ItemTitle' => FieldLayout::READ,
+                'State' => FieldLayout::WRITE,
+                'Date' => FieldLayout::WRITE,
+                'Comment' => FieldLayout::WRITE,
+                'FileID' => $hasFile ? FieldLayout::WRITE : FieldLayout::HIDDEN,
+            ]);
     }
 
     private function stateBadge(DataObject $record): string

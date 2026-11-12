@@ -2,6 +2,9 @@
 
 namespace Atwx\Flow\Model;
 
+use Atwx\SilverstripeFrontdeskKit\Forms\RecordFiles;
+use SilverStripe\Assets\File;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
@@ -36,6 +39,7 @@ class ChecklistEntry extends DataObject
         'Case' => DataObject::class,
         'Item' => ChecklistItem::class,
         'ChangedBy' => Member::class,
+        'File' => File::class,
     ];
 
     private static array $indexes = [
@@ -66,6 +70,15 @@ class ChecklistEntry extends DataObject
         return $item->exists() ? (string) $item->Title : '';
     }
 
+    /**
+     * File mode of the item: none, optional or required.
+     */
+    public function fileMode(): string
+    {
+        $item = $this->Item();
+        return $item->exists() ? (string) $item->FileMode : 'none';
+    }
+
     public function isComplete(): bool
     {
         return in_array((string) $this->State, self::COMPLETE, true);
@@ -82,7 +95,33 @@ class ChecklistEntry extends DataObject
         $labels['State'] = $labels['StateLabel'] = _t(self::class . '.db_State', 'State');
         $labels['Date'] = _t(self::class . '.db_Date', 'Date');
         $labels['Comment'] = _t(self::class . '.db_Comment', 'Comment');
+        $labels['File'] = $labels['FileID'] = _t(self::class . '.has_one_File', 'File');
         return $labels;
+    }
+
+    /**
+     * An item with a required file can only be done with a file.
+     */
+    public function validate(): ValidationResult
+    {
+        $result = parent::validate();
+        if ((string) $this->State === 'done' && $this->fileMode() === 'required' && !$this->FileID) {
+            $result->addFieldError('FileID', _t(
+                self::class . '.FILE_MISSING',
+                'Please upload the file before marking „{item}“ as done.',
+                ['item' => $this->getItemTitle()]
+            ));
+        }
+        return $result;
+    }
+
+    /**
+     * The uploaded file goes with the entry.
+     */
+    protected function onAfterDelete(): void
+    {
+        parent::onAfterDelete();
+        RecordFiles::deleteFiles($this);
     }
 
     protected function onBeforeWrite(): void

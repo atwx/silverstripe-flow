@@ -109,6 +109,7 @@ workflows:
         required_before: done
       - code: certificate
         title: Teilnahmebescheinigungen
+        file: required
     permissions:
       - group: basics
         role: organisers
