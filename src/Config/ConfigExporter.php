@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Config;
 
+use Atwx\Flow\Model\ChecklistItem;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
@@ -191,6 +192,20 @@ class ConfigExporter
         }
         if ($followUps) {
             $data['follow_ups'] = $followUps;
+        }
+
+        // Only written when there are items, so older files stay unchanged.
+        $checklist = [];
+        foreach (ChecklistItem::get()->filter('WorkflowID', $workflow->ID) as $item) {
+            $entry = ['code' => $item->Code, 'title' => $item->Title];
+            $status = $item->RequiredBefore();
+            if ($status->exists()) {
+                $entry['required_before'] = $status->Code;
+            }
+            $checklist[] = $entry;
+        }
+        if ($checklist) {
+            $data['checklist'] = $checklist;
         }
 
         $roleSort = array_flip(FlowRole::get()->filter('WorkflowID', $workflow->ID)->column('ID'));

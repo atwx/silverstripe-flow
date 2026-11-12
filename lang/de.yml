@@ -14,6 +14,7 @@ de:
     WORKFLOW_REQUIRED: 'Der Eintrag muss zu einem Ablauf gehören.'
     FOREIGN_RECORD: 'Bitte einen Eintrag aus demselben Ablauf wählen.'
   Atwx\Flow\Model\Workflow:
+    has_many_ChecklistItems: 'Checkliste'
     has_many_FollowUpRules: 'Wiedervorlage-Regeln'
     has_many_DocumentTemplates: 'Vorlagen'
     has_many_Responsibilities: 'Zuständigkeiten'
@@ -100,6 +101,7 @@ de:
     NOTE_EMPTY: 'Bitte einen Text eingeben.'
     NOTE_NOT_ALLOWED: 'Sie dürfen hier keine Notizen anlegen.'
   Atwx\Flow\Service\TransitionService:
+    CHECKLIST_MISSING: 'Vor „{status}“ fehlt noch in der Checkliste: {items}.'
     NO_WORKFLOW: 'Für diesen Eintrag gibt es keinen Ablauf.'
     NOT_SAVED: 'Bitte zuerst speichern.'
     UNKNOWN_STATUS: 'Unbekannter Status.'
@@ -290,3 +292,22 @@ de:
     VIEW_OVERDUE: 'Überfällig'
     DONE: 'Als erledigt markieren'
     DONE_COUNT: '{count} Wiedervorlagen erledigt.'
+  Atwx\Flow\Model\ChecklistItem:
+    SINGULARNAME: 'Checklisten-Punkt'
+    PLURALNAME: 'Checkliste'
+    db_Code: 'Code'
+    db_Title: 'Titel'
+    db_Sort: 'Reihenfolge'
+    has_one_RequiredBefore: 'Erforderlich vor Status'
+    STATUS_FOREIGN: 'Der Status muss zu diesem Ablauf gehören.'
+  Atwx\Flow\Model\ChecklistEntry:
+    has_one_Item: 'Punkt'
+    db_State: 'Stand'
+    db_Date: 'Datum'
+    db_Comment: 'Bemerkung'
+    STATE_OPEN: 'offen'
+    STATE_REQUESTED: 'angefordert'
+    STATE_DONE: 'erledigt'
+    STATE_NOT_NEEDED: 'nicht nötig'
+  Atwx\Flow\Controller\ChecklistSubController:
+    TITLE: 'Checkliste'

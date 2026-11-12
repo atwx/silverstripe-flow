@@ -8,8 +8,6 @@ use Atwx\SilverstripeFrontdeskKit\Table\BulkAction;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\ListView;
 use SilverStripe\Core\ClassInfo;
-use SilverStripe\Model\ArrayData;
-use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Security;
@@ -26,6 +24,11 @@ class FollowUpController extends FrontdeskController
     private static string $url_segment = 'followups';
 
     private static string $title = 'Wiedervorlagen';
+
+    /**
+     * Follow-ups are added in the case file.
+     */
+    private static bool $allow_add = false;
 
     /**
      * Case controllers by case class (the first one routed for a class).
@@ -141,16 +144,5 @@ class FollowUpController extends FrontdeskController
                 return _t(self::class . '.DONE_COUNT', '{count} follow-ups done.', ['count' => $count]);
             }),
         ];
-    }
-
-    /**
-     * Follow-ups are added in the case file, not here.
-     *
-     * @return ArrayList<ArrayData>
-     */
-    // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- template method of the kit
-    public function Actions(): ArrayList
-    {
-        return parent::Actions()->exclude('Primary', true);
     }
 }

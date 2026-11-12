@@ -103,6 +103,12 @@ workflows:
         status: with_speaker
         days: 7
         responsibility: lead
+    checklist:
+      - code: room
+        title: 'Raum gebucht'
+        required_before: done
+      - code: certificate
+        title: Teilnahmebescheinigungen
     permissions:
       - group: basics
         role: organisers

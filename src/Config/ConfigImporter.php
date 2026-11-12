@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Config;
 
+use Atwx\Flow\Model\ChecklistItem;
 use Atwx\Flow\Model\CustomField;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\FieldGroup;
@@ -98,6 +99,7 @@ class ConfigImporter
             'custom_fields' => $this->importCustomField(...),
             'documents' => $this->importDocumentTemplate(...),
             'follow_ups' => $this->importFollowUpRule(...),
+            'checklist' => $this->importChecklistItem(...),
             'permissions' => $this->importPermission(...),
         ];
         foreach ($sections as $key => $importer) {
@@ -287,6 +289,21 @@ class ConfigImporter
         }
         $rule->Sort = $index + 1;
         $this->save($rule, "{$path} ({$code})");
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function importChecklistItem(Workflow $workflow, array $definition, string $path, int $index): void
+    {
+        $code = $this->string($definition, 'code', $path);
+        $item = $this->child(ChecklistItem::class, $workflow, $code);
+        $item->Title = $this->string($definition, 'title', $path);
+        $item->RequiredBeforeID = isset($definition['required_before'])
+            ? $this->status($workflow, (string) $definition['required_before'], $path)->ID
+            : 0;
+        $item->Sort = $index + 1;
+        $this->save($item, "{$path} ({$code})");
     }
 
     /**

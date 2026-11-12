@@ -304,6 +304,23 @@ SilverStripe\Control\Director:
 
 Creating and closing appear in the timeline; follow-ups are deleted with the case file.
 
+## Checklists
+
+A workflow can have a checklist ("Unterlagen und Aufgaben"): every case file
+gets one entry per item with state (*offen*, *angefordert*, *erledigt*,
+*nicht nötig*), date and comment, edited in the sub-list *Checkliste* (entries
+are created when the list is shown; they cannot be added or deleted there).
+An item can be required before a status: the case file cannot enter it until
+the item is done or not needed (the status change is refused with the list of
+missing items).
+
+```yaml
+    checklist:
+      - code: health_form
+        title: Health Form
+        required_before: placed
+```
+
 ## Edit links
 
 People without an account work on a case file through an edit link. Members who
