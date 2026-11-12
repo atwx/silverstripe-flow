@@ -31,11 +31,11 @@ class FollowUpController extends FrontdeskController
     private static bool $allow_add = false;
 
     /**
-     * Case controllers by case class (the first one routed for a class).
+     * Case controllers by case class (the first subclass found for a class).
      *
      * @var array<string, FlowCaseController>|null
      */
-    private ?array $caseControllers = null;
+    protected static ?array $caseControllerCache = null;
 
     /**
      * Open follow-ups of case files whose list the member may view.
@@ -45,7 +45,7 @@ class FollowUpController extends FrontdeskController
     protected function getBaseList(): DataList
     {
         $classes = [];
-        foreach ($this->caseControllers() as $class => $controller) {
+        foreach (self::caseControllers() as $class => $controller) {
             if ($controller->canView()) {
                 $classes[] = $class;
             }
@@ -58,19 +58,27 @@ class FollowUpController extends FrontdeskController
     /**
      * @return array<string, FlowCaseController>
      */
-    protected function caseControllers(): array
+    protected static function caseControllers(): array
     {
-        if ($this->caseControllers === null) {
-            $this->caseControllers = [];
+        if (self::$caseControllerCache === null) {
+            self::$caseControllerCache = [];
             foreach (ClassInfo::subclassesFor(FlowCaseController::class, false) as $class) {
                 $controller = singleton($class);
                 $model = (string) $controller->config()->get('managed_model');
-                if ($model !== '' && !isset($this->caseControllers[$model])) {
-                    $this->caseControllers[$model] = $controller;
+                if ($model !== '' && !isset(self::$caseControllerCache[$model])) {
+                    self::$caseControllerCache[$model] = $controller;
                 }
             }
         }
-        return $this->caseControllers;
+        return self::$caseControllerCache;
+    }
+
+    /**
+     * The controller of case files of a class (for links), if there is one.
+     */
+    public static function caseControllerFor(string $class): ?FlowCaseController
+    {
+        return self::caseControllers()[$class] ?? null;
     }
 
     protected function defineColumns(): ColumnCollection
@@ -94,7 +102,7 @@ class FollowUpController extends FrontdeskController
             return '';
         }
         $title = htmlspecialchars((string) $case->getTitle());
-        $controller = $this->caseControllers()[$case::class] ?? null;
+        $controller = self::caseControllerFor($case::class);
         if (!$controller) {
             return $title;
         }
