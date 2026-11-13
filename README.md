@@ -845,7 +845,8 @@ Atwx\Flow\Intake\IntakeService:
 - **Idempotency:** with the header `Idempotency-Key`, a repeated call of the
   same client returns the first submission (200, header
   `Idempotent-Replayed: true`) instead of creating another; the same key for
-  another form type answers 409.
+  another form type answers 409. The repetition hands out a new receipt link;
+  the earlier one stops working.
 - **Notification:** a mail to `notify.to` after the submission is stored. A
   failure is logged and shown on the submission; the submission is accepted
   anyway. The body is the text block `notify.block` (maintained by the staff)
