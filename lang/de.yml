@@ -328,6 +328,9 @@ de:
     STATUS_REQUIRED: 'Bitte einen Status dieses Ablaufs wählen.'
     DAYS_NEGATIVE: 'Die Anzahl der Tage darf nicht negativ sein.'
   Atwx\Flow\Model\Comment:
+    STREAM_APPOINTMENT: 'Termin'
+    STREAM_DUE: 'Fällig'
+    STREAM_DONE: 'erledigt'
     SINGULARNAME: 'Kommentar'
     PLURALNAME: 'Kommentare'
     KIND_MEMO: 'Memo'
@@ -347,6 +350,9 @@ de:
     TEXT_TOO_LONG: 'Bitte höchstens {max} Zeichen.'
     TEXT_REQUIRED: 'Bitte einen Text eingeben.'
   Atwx\Flow\Controller\CommentSubController:
+    DELETE_SELECTED: 'Ausgewählte löschen'
+    CONFIRM_DELETE_SELECTED: 'Die ausgewählten Kommentare löschen?'
+    DELETED_COUNT: '{count} Kommentare gelöscht.'
     TITLE: 'Kommentare'
   Atwx\Flow\Controller\FollowUpColumns:
     YES: 'ja'
@@ -361,6 +367,10 @@ de:
     DONE_COUNT: '{count} Einträge erledigt.'
     TAKE: 'Übernehmen'
     TAKE_COUNT: '{count} Einträge übernommen.'
+    DELETE: 'Löschen'
+    DELETE_COUNT: '{count} Einträge gelöscht.'
+    DELETE_CONFIRM: 'Die ausgewählten Einträge löschen?'
+    VIEW_APPOINTMENTS: 'Meine Termine'
   Atwx\Flow\Service\FollowUpDigest:
     SUBJECT: 'Fällige Wiedervorlagen ({count})'
     GREETING: 'Guten Tag {name},'
