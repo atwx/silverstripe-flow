@@ -105,7 +105,8 @@ class ContactTest extends SapphireTest
         ]);
         $ben->write();
 
-        $this->assertSame('visits,invoices', $anna->Roles);
+        $this->assertSame('["visits","invoices"]', $anna->Roles);
+        $this->assertSame(['visits'], ContactPerson::get()->byID($ben->ID)?->roleCodes(), 'normalised on write');
         $this->assertSame('Besuche, Rechnungen', $anna->getRolesLabel());
         $this->assertSame('Anna Berg (Sekretariat)', $anna->getTitle());
         $this->assertSame((int) $anna->ID, (int) $school->contactFor('invoices')?->ID);
@@ -135,6 +136,9 @@ class ContactTest extends SapphireTest
         $channel = ContactChannel::get()->find('Value', 'post@example.org');
         $this->assertSame([TestSchool::class, (int) $school->ID], [$channel?->OwnerClass, (int) $channel?->OwnerID]);
         $this->assertSame(1, $sub->Items()->getTotalItems());
+        $this->assertNotNull($channel);
+        $cell = (string) $sub->Columns()->byName('ValueLink')?->renderValue($channel);
+        $this->assertSame('<a href="mailto:post@example.org">post@example.org</a>', $cell, 'link, not escaped');
 
         Config::modify()->set(TestSchool::class, 'flow_contact_free_types', true);
         $this->assertInstanceOf(

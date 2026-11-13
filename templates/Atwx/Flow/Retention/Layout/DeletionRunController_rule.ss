@@ -7,7 +7,7 @@
     <div class="card bg-base-100 shadow-sm max-w-3xl">
         <div class="card-body">
             <% if $Rule.Description %><p>$Rule.Description</p><% end_if %>
-            <p><strong>$Due</strong> $Rule.ModelName <%t Atwx\Flow\Retention\DeletionRunController.DUE 'due (dated before {date})' date=$Rule.Cutoff %></p>
+            <p><strong>$Due</strong> $Rule.ModelName <%t Atwx\Flow\Retention\DeletionRunController.DUE 'due (dated before {date})' date=$Rule.Cutoff.Nice %></p>
             <% if $Labels %>
             <ul class="list-disc ps-6 text-sm">
                 <% loop $Labels %><li>$Label</li><% end_loop %>

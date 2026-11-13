@@ -10,6 +10,7 @@ use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Model\ArrayData;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\Security\SecurityToken;
 use SilverStripe\Security\Security;
@@ -60,7 +61,7 @@ class DeletionRunController extends FrontdeskController
                 'Name' => $rule->getName(),
                 'Title' => $rule->getTitle(),
                 'Description' => $rule->getDescription(),
-                'Cutoff' => $rule->cutoff(),
+                'Cutoff' => DBField::create_field('Date', $rule->cutoff()),
                 'Due' => $rule->candidates()->count(),
                 'Automatic' => $rule->isAutomatic(),
                 'LastRun' => $last,
@@ -85,7 +86,7 @@ class DeletionRunController extends FrontdeskController
             'Rule' => ArrayData::create([
                 'Name' => $rule->getName(),
                 'Description' => $rule->getDescription(),
-                'Cutoff' => $rule->cutoff(),
+                'Cutoff' => DBField::create_field('Date', $rule->cutoff()),
                 'Automatic' => $rule->isAutomatic(),
                 'ModelName' => DataObject::singleton($rule->modelClass())->i18n_plural_name(),
             ]),

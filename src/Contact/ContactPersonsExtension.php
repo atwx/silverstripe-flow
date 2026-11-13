@@ -41,12 +41,7 @@ class ContactPersonsExtension extends Extension
      */
     public function contactsFor(string $role): DataList
     {
-        return $this->persons()->filterAny([
-            'Roles' => $role,
-            'Roles:StartsWith' => $role . ',',
-            'Roles:EndsWith' => ',' . $role,
-            'Roles:PartialMatch' => ',' . $role . ',',
-        ]);
+        return $this->persons()->filter('Roles:PartialMatch', json_encode($role));
     }
 
     /**

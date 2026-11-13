@@ -13,7 +13,7 @@
                 <h2 class="card-title text-lg">$Title</h2>
                 <% if $Description %><p class="text-sm opacity-70">$Description</p><% end_if %>
                 <p>
-                    <strong>$Due</strong> <%t Atwx\Flow\Retention\DeletionRunController.DUE 'due (dated before {date})' date=$Cutoff %>
+                    <strong>$Due</strong> <%t Atwx\Flow\Retention\DeletionRunController.DUE 'due (dated before {date})' date=$Cutoff.Nice %>
                     <% if $Automatic %><span class="badge badge-sm badge-ghost ms-1"><%t Atwx\Flow\Retention\DeletionRunController.AUTOMATIC 'daily' %></span><% end_if %>
                 </p>
                 <% if $LastRun %>

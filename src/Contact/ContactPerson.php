@@ -52,7 +52,7 @@ class ContactPerson extends DataObject
         'Email' => 'Varchar(255)',
         'Phone' => 'Varchar(100)',
         'Mobile' => 'Varchar(100)',
-        // Role codes, comma separated
+        // Role codes as a JSON list (the format of CheckboxSetField)
         'Roles' => 'Varchar(255)',
         'Notes' => 'Text',
         'Sort' => 'Int',
@@ -98,7 +98,24 @@ class ContactPerson extends DataObject
      */
     public function roleCodes(): array
     {
-        return array_values(array_filter(array_map('trim', explode(',', (string) $this->Roles))));
+        return self::decodeRoles($this->getField('Roles'));
+    }
+
+    /**
+     * Role codes from a list, a JSON list or a comma separated string.
+     *
+     * @return array<int, string>
+     */
+    private static function decodeRoles(mixed $value): array
+    {
+        if (is_string($value) && str_starts_with(trim($value), '[')) {
+            $value = json_decode($value, true);
+        }
+        $codes = is_array($value) ? $value : explode(',', (string) $value);
+        return array_values(array_unique(array_filter(
+            array_map('trim', array_map('strval', $codes)),
+            fn ($code) => $code !== ''
+        )));
     }
 
     public function hasRole(string $code): bool
@@ -126,14 +143,20 @@ class ContactPerson extends DataObject
      */
     public function setRoles(mixed $value): static
     {
-        $codes = is_array($value) ? $value : explode(',', (string) $value);
         $known = array_keys(self::roleOptions());
         $codes = array_values(array_filter(
-            array_map('trim', array_map('strval', $codes)),
-            fn ($code) => $code !== '' && (!$known || in_array($code, $known, true))
+            self::decodeRoles($value),
+            fn ($code) => !$known || in_array($code, $known, true)
         ));
-        $this->setField('Roles', implode(',', $codes));
+        $this->setField('Roles', $codes ? (string) json_encode($codes) : null);
         return $this;
+    }
+
+    protected function onBeforeWrite(): void
+    {
+        parent::onBeforeWrite();
+        // Roles given as data (import, create()) bypass setRoles()
+        $this->setRoles($this->getField('Roles'));
     }
 
     /**

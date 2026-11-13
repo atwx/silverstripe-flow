@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Contact;
 
+use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextareaField;
@@ -16,6 +17,14 @@ class ContactPersonSubController extends OwnedRecordsSubController
     private static string $url_segment = 'contactpersons';
 
     private static string $title = 'Ansprechpersonen';
+
+    protected function defineColumns(): ColumnCollection
+    {
+        $columns = parent::defineColumns();
+        // mailto/tel link
+        $columns->byName('EmailLink')?->type('html');
+        return $columns;
+    }
 
     protected function formFields(FieldList $fields): FieldList
     {
