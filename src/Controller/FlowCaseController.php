@@ -31,6 +31,7 @@ use Atwx\Flow\Ui\FlowFieldLayout;
 use Atwx\Flow\Ui\FlowRecordActions;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController;
 use Atwx\SilverstripeFrontdeskKit\Filter\FilterCollection;
+use Atwx\SilverstripeFrontdeskKit\Filter\MultiSelectFilter;
 use Atwx\SilverstripeFrontdeskKit\Filter\SelectFilter;
 use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
 use Atwx\SilverstripeFrontdeskKit\Table\ActionException;
@@ -220,19 +221,21 @@ abstract class FlowCaseController extends FrontdeskController
                     ->options(fn () => Phase::get()->filter('WorkflowID', $workflowID)->map('ID', 'Title')->toArray())
                     ->apply(fn ($list, $value) => $list->filter('FlowStatus.PhaseID', (int) $value))
             )
+            // Several statuses or members can be chosen (any of them); a single
+            // value from older links and saved views still works.
             ->add(
-                SelectFilter::create('FlowStatus', _t(self::class . '.STATUS', 'Status'))
+                MultiSelectFilter::create('FlowStatus', _t(self::class . '.STATUS', 'Status'))
                     ->options(fn () => Status::get()->filter('WorkflowID', $workflowID)->map('ID', 'Title')->toArray())
-                    ->apply(fn ($list, $value) => $list->filter('FlowStatusID', (int) $value))
+                    ->apply(fn ($list, array $values) => $list->filter('FlowStatusID', array_map('intval', $values)))
             );
         foreach ($this->responsibilities() as $responsibility) {
             $filters->add(
-                SelectFilter::create('Assignee_' . $responsibility->Code, (string) $responsibility->Title)
+                MultiSelectFilter::create('Assignee_' . $responsibility->Code, (string) $responsibility->Title)
                     ->options(fn () => $responsibility->candidateOptions())
-                    ->apply(fn ($list, $value) => $this->filterByAssignee(
+                    ->apply(fn ($list, array $values) => $this->filterByAssignee(
                         $list,
                         [(int) $responsibility->ID],
-                        (int) $value
+                        array_map('intval', $values)
                     ))
             );
         }
@@ -250,18 +253,19 @@ abstract class FlowCaseController extends FrontdeskController
      * Only offered to members who may read the field in some status.
      */
     /**
-     * Case files assigned to the member in one of the responsibilities.
+     * Case files assigned to one of the members in one of the responsibilities.
      *
      * @param DataList<DataObject> $list
      * @param array<int, int> $responsibilityIDs
+     * @param int|array<int, int> $memberIDs
      * @return DataList<DataObject>
      */
-    protected function filterByAssignee(DataList $list, array $responsibilityIDs, int $memberID): DataList
+    protected function filterByAssignee(DataList $list, array $responsibilityIDs, int|array $memberIDs): DataList
     {
         $ids = Assignment::get()->filter([
             'CaseClass' => $this->getManagedModel(),
             'ResponsibilityID' => $responsibilityIDs ?: [0],
-            'MemberID' => $memberID,
+            'MemberID' => is_array($memberIDs) ? ($memberIDs ?: [0]) : $memberIDs,
         ])->column('CaseID');
         return $list->filter('ID', $ids ?: [0]);
     }

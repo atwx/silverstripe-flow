@@ -260,6 +260,52 @@ class FlowCaseControllerTest extends SapphireTest
         $filtered = $controller->filteredIDs();
         $this->assertCount(1, $filtered, 'filter by assignee');
         $this->assertSame((int) $course->ID, $filtered[0]);
+
+        // Several members: any of them.
+        $colleague = Member::create(['Email' => 'colleague@example.com', 'FirstName' => 'Kai']);
+        $colleague->write();
+        $colleague->Groups()->add(Group::get()->find('Code', 'organisers'));
+        $lead = Responsibility::get()->filter(['Code' => 'lead', 'Workflow.Code' => 'course'])->first();
+        $this->assertNotNull($lead);
+        AssignmentService::singleton()->assign($other, $lead, $colleague, $me);
+        $filtered = $this->filtered($controller, ['Assignee_lead' => json_encode([$me->ID, $colleague->ID])]);
+        $this->assertEqualsCanonicalizing([(int) $course->ID, (int) $other->ID], $filtered, 'any of the members');
+    }
+
+    public function testStatusFilterWithSeveralStatuses(): void
+    {
+        $this->logInTo('organisers');
+        $draft = $this->courseIn('draft');
+        $review = $this->courseIn('review');
+        $this->courseIn('released');
+        $controller = TestCourseController::create();
+        $ids = fn (string ...$codes) => array_map(
+            fn (string $code) => (int) Status::get()
+                ->filter(['Code' => $code, 'Workflow.Code' => 'course'])
+                ->first()?->ID,
+            $codes
+        );
+        $this->assertEqualsCanonicalizing(
+            [(int) $draft->ID, (int) $review->ID],
+            $this->filtered($controller, ['FlowStatus' => json_encode($ids('draft', 'review'))])
+        );
+        $this->assertSame(
+            [(int) $review->ID],
+            $this->filtered($controller, ['FlowStatus' => (string) $ids('review')[0]]),
+            'single value (older links and saved views)'
+        );
+    }
+
+    /**
+     * @param array<string, string> $vars
+     * @return array<int, int>
+     */
+    private function filtered(TestCourseController $controller, array $vars): array
+    {
+        $request = new HTTPRequest('GET', 'test-courses', $vars);
+        $request->setSession(new Session([]));
+        $controller->setRequest($request);
+        return array_map('intval', $controller->filteredIDs());
     }
 
     public function testReadersGetNoResponsibilityAction(): void
