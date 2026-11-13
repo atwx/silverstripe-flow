@@ -971,6 +971,53 @@ NumberSequences::singleton()->setLast('invoice', '2026', 1200);
 A number is lost (a gap) only when the write after drawing it fails. The inbox
 numbers its submissions with these sequences too (`intake-<type>`).
 
+## Deletion runs
+
+Deletes records whose retention period has passed (data protection), by
+rule, with everything attached to them, and logs each run.
+
+```yaml
+Atwx\Flow\Retention\Retention:
+  rules:
+    registrations:
+      title: 'Anmeldungen vergangener Veranstaltungen'
+      description: 'Zwölf Monate nach der Veranstaltung'
+      class: 'App\Models\Registration'
+      date_field: 'Event.StartDate'   # a field or relation path (default Created)
+      months: 12                      # and/or days
+      filter: { Status: 'done' }      # optional
+      exclude: { Keep: true }         # optional
+      automatic: true                 # also run by the daily sake flow:retention
+      rule: 'App\Retention\MyRule'   # optional RetentionRule subclass
+
+SilverStripe\Control\Director:
+  rules:
+    'deletion-runs//$Action/$ID': 'Atwx\Flow\Retention\DeletionRunController'
+```
+
+- **What is deleted:** the record with its `cascade_deletes` (files, child
+  records) and, for case files, history, notes, comments, checklist, mails,
+  documents and edit links. Versioned records are archived and their history
+  rows removed. "Recently viewed" entries of the kit are removed too. Each
+  record is deleted in its own transaction; a failure is counted and logged,
+  the run goes on.
+- **Own logic:** a subclass of `RetentionRule` overrides `candidates()` (which
+  records are due), `keepReason($record)` (keep a due record this time, e.g.
+  a family with an open case; counted per reason) or `label($record)` (the
+  preview line).
+- **Page "Löschläufe"** (`DeletionRunController`): each rule with the number of
+  due records, a preview of the first 50, the button "Jetzt löschen" (POST,
+  with confirmation) and the log of past runs. Permissions
+  `FDK_DELETION_RUNS_VIEW` (rules, preview, log) and `FDK_DELETION_RUNS_EDIT`
+  (run).
+- **Log** (`DeletionRun`): rule, cutoff date, who started it (or automatic),
+  how many were deleted, kept (with reasons) and failed. No personal data of
+  the deleted records.
+- **Cron:** `sake flow:retention` runs the rules with `automatic: true` daily,
+  besides the API log cleanup.
+- Hooks on `Retention`: `onBeforeRetentionDelete($record, $rule)`,
+  `onAfterRetentionDelete($class, $id, $rule)`.
+
 ## Extension points
 
 | Hook | Where | Use |
