@@ -216,6 +216,23 @@ class EventController extends FlowCaseController
 
 Extensions can add entries to the timeline with `updateFlowTimeline(ArrayList $entries, DataObject $record)`.
 
+### Case actions on record pages
+
+With record pages (`defineRecordPages()`), the case actions can be bound to
+the page where they belong (frontdesk-kit `record_action_pages`); actions not
+listed stay on every page:
+
+```yaml
+App\Controllers\StudentController:
+  record_action_pages:
+    flowstatus: 'status'      # Status ändern
+    flownote: 'status'        # Notiz hinzufügen
+    flowassign: 'status'      # Zuständigkeit
+    flowdocument: 'letters'   # Schreiben erstellen
+    flowmail: 'letters'       # Mail schreiben
+    flowrevoke: 'links'       # Bearbeitungslink widerrufen
+```
+
 ## Responsibilities
 
 A workflow can name responsibilities ("Zuständigkeit"), e.g. *Verantwortlich*
@@ -952,7 +969,9 @@ App\Models\Invoice:
   fdk_hidden_fields: [Number, NumberYear, Reference]
 ```
 
-The project defines the fields (add a unique index on number and year).
+The project defines the fields. Add a unique index on number and year once
+all existing records have a number (a unique index fails on rows that are
+still 0).
 `$record->getFormattedNumber()` (`$FormattedNumber` in templates) returns the
 formatted number. With `assign: 'manual'` the number is drawn when the code
 calls `assignNumber()`, e.g. when an invoice is released, so drafts do not use
