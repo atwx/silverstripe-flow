@@ -8,6 +8,7 @@ use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Model\Responsibility;
+use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Model\Workflow;
 use SilverStripe\Assets\Storage\AssetStore;
 use SilverStripe\Core\Config\Configurable;
@@ -27,6 +28,25 @@ use SilverStripe\View\SSViewer;
  * The body is rendered into the template "Atwx\Flow\Document\FlowDocument"
  * (projects override it for their letterhead), turned into a PDF by the
  * PdfRenderer and stored protected with the case file.
+ *
+ * @phpstan-type DocumentInput array{
+ *     FreeText?: string,
+ *     SelectedIDs?: array<int, int>|null,
+ *     SignerID?: int,
+ *     BlockIDs?: array<int, int>
+ * }
+ * @phpstan-type DocumentContext array{
+ *     FreeText: string,
+ *     Selected: iterable<DataObject>,
+ *     Signer: ?Member,
+ *     SelectedBlocks: iterable<TextBlock>
+ * }
+ * @phpstan-type DocumentInputs array{
+ *     FreeText: string,
+ *     SelectedIDs: array<int, int>|null,
+ *     SignerID: int,
+ *     BlockIDs: array<int, int>
+ * }
  */
 class DocumentService
 {
@@ -48,12 +68,13 @@ class DocumentService
     /**
      * The full HTML of a document (letterhead template with the filled body).
      *
-     * The template gets Title, Body, Case, Template, Date, Signer, FreeText and
-     * Selected, plus the case file's flowDocumentData($template, $signer) if it
+     * The template gets Title, Body, Case, Template, Date, Signer, FreeText,
+     * Selected and SelectedBlocks, plus the case file's
+     * flowDocumentData($template, $signer) if it
      * has that method and what DocumentService extensions add in
      * updateFlowDocumentData(array &$data, DataObject $case, DocumentTemplate $template).
      *
-     * @param array{FreeText?: string, SelectedIDs?: array<int, int>|null, SignerID?: int} $input
+     * @param DocumentInput $input
      */
     public function html(DataObject $case, DocumentTemplate $template, ?Member $by, array $input = []): string
     {
@@ -68,6 +89,7 @@ class DocumentService
             'Signer' => $context['Signer'],
             'FreeText' => $context['FreeText'],
             'Selected' => $context['Selected'],
+            'SelectedBlocks' => $context['SelectedBlocks'],
         ];
         if ($case->hasMethod('flowDocumentData')) {
             $data = array_merge($data, (array) $case->flowDocumentData($template, $context['Signer']));
@@ -81,7 +103,7 @@ class DocumentService
      * SelectedIDs (null = all entries of the template's Select relation) and
      * SignerID (0 = default signer).
      *
-     * @param array{FreeText?: string, SelectedIDs?: array<int, int>|null, SignerID?: int} $input
+     * @param DocumentInput $input
      */
     public function create(DataObject $case, DocumentTemplate $template, ?Member $by, array $input = []): CaseDocument
     {
@@ -99,7 +121,7 @@ class DocumentService
      * Creates the PDF of an existing document again from the current data,
      * with new inputs or (null) the ones it was created with.
      *
-     * @param array{FreeText?: string, SelectedIDs?: array<int, int>|null, SignerID?: int}|null $input
+     * @param DocumentInput|null $input
      */
     public function regenerate(CaseDocument $document, ?Member $by, ?array $input = null): CaseDocument
     {
@@ -119,7 +141,7 @@ class DocumentService
     /**
      * The inputs a document was created with.
      *
-     * @return array{FreeText: string, SelectedIDs: array<int, int>|null, SignerID: int}
+     * @return DocumentInputs
      */
     public function inputOf(CaseDocument $document): array
     {
@@ -127,6 +149,7 @@ class DocumentService
             'FreeText' => (string) $document->FreeText,
             'SelectedIDs' => $document->SelectedIDs === null ? null : $document->selectedIDs(),
             'SignerID' => (int) $document->SignerID,
+            'BlockIDs' => $document->blockIDs(),
         ];
     }
 
@@ -177,7 +200,7 @@ class DocumentService
     }
 
     /**
-     * @param array{FreeText?: string, SelectedIDs?: array<int, int>|null, SignerID?: int} $input
+     * @param DocumentInput $input
      */
     private function render(
         CaseDocument $document,
@@ -192,6 +215,11 @@ class DocumentService
         $document->Title = $title;
         $document->FreeText = $context['FreeText'];
         $document->SignerID = (int) $context['Signer']?->ID;
+        $blockIDs = [];
+        foreach ($context['SelectedBlocks'] as $block) {
+            $blockIDs[] = (int) $block->ID;
+        }
+        $document->BlockIDs = $blockIDs ? (string) json_encode($blockIDs) : null;
         if (array_key_exists('SelectedIDs', $input) && $input['SelectedIDs'] !== null) {
             $document->setSelectedIDList($input['SelectedIDs']);
         } else {
@@ -210,8 +238,8 @@ class DocumentService
     }
 
     /**
-     * @param array{FreeText?: string, SelectedIDs?: array<int, int>|null, SignerID?: int} $input
-     * @return array{FreeText: string, Selected: iterable<DataObject>, Signer: ?Member}
+     * @param DocumentInput $input
+     * @return DocumentContext
      */
     private function context(DataObject $case, DocumentTemplate $template, ?Member $by, array $input): array
     {
@@ -224,10 +252,15 @@ class DocumentService
         $signer = $signerID && isset($this->signerOptions($case, $template, $by)[$signerID])
             ? Member::get()->byID($signerID)
             : $this->defaultSigner($case, $template, $by);
+        $choice = $template->blockChoice();
+        $blockIDs = array_values(array_map('intval', $input['BlockIDs'] ?? []));
         return [
             'FreeText' => $template->FreeText ? trim((string) ($input['FreeText'] ?? '')) : '',
             'Selected' => $selected,
             'Signer' => $signer,
+            'SelectedBlocks' => $choice !== null && $blockIDs
+                ? TextBlock::choosable($choice)->filter('ID', $blockIDs)
+                : [],
         ];
     }
 
@@ -240,7 +273,7 @@ class DocumentService
     }
 
     /**
-     * @param array{FreeText: string, Selected: iterable<DataObject>, Signer: ?Member} $context
+     * @param DocumentContext $context
      */
     private function title(DataObject $case, DocumentTemplate $template, ?Member $by, array $context): string
     {

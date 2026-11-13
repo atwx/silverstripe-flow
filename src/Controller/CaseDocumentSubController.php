@@ -4,6 +4,7 @@ namespace Atwx\Flow\Controller;
 
 use Atwx\Flow\Model\CaseDocument;
 use Atwx\Flow\Model\DocumentTemplate;
+use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Service\DocumentService;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskSubController;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
@@ -175,6 +176,15 @@ class CaseDocumentSubController extends FrontdeskSubController
             }
             $fields->push($field);
         }
+        $choice = $template?->blockChoice();
+        if ($choice !== null) {
+            $blocks = TextBlock::choosable($choice)->map('ID', 'Title')->toArray();
+            $field = CheckboxSetField::create('BlockIDs', _t(self::class . '.BLOCKS', 'Text blocks'), $blocks);
+            if (!$blocks) {
+                $field->setDescription(_t(self::class . '.NO_BLOCKS', 'There are no text blocks to choose.'));
+            }
+            $fields->push($field);
+        }
         if ($template?->FreeText) {
             $fields->push(TextareaField::create('FreeText', _t(self::class . '.FREE_TEXT', 'Free text'))->setRows(8));
         }
@@ -205,10 +215,11 @@ class CaseDocumentSubController extends FrontdeskSubController
         if ($case && $template && !$this->getRequest()->isPOST()) {
             $input = $document
                 ? $service->inputOf($document)
-                : ['FreeText' => '', 'SelectedIDs' => null, 'SignerID' => 0];
+                : ['FreeText' => '', 'SelectedIDs' => null, 'SignerID' => 0, 'BlockIDs' => []];
             $form->loadDataFrom([
                 'Entries' => $input['SelectedIDs'] ?? array_keys($entries),
                 'FreeText' => $input['FreeText'],
+                'BlockIDs' => $input['BlockIDs'],
                 'SignerID' => $input['SignerID'] ?: (int) $service->defaultSigner($case, $template, $me)?->ID,
             ]);
         }
@@ -272,12 +283,14 @@ class CaseDocumentSubController extends FrontdeskSubController
 
     /**
      * @param array<string, mixed> $data
-     * @return array{FreeText: string, SelectedIDs: array<int, int>|null, SignerID: int}
+     * @return array{FreeText: string, SelectedIDs: array<int, int>|null, SignerID: int, BlockIDs: array<int, int>}
      */
     private function inputFrom(array $data, DocumentTemplate $template): array
     {
         $entries = $data['Entries'] ?? [];
+        $blocks = $data['BlockIDs'] ?? [];
         return [
+            'BlockIDs' => array_values(array_map('intval', is_array($blocks) ? $blocks : [])),
             'FreeText' => (string) ($data['FreeText'] ?? ''),
             'SelectedIDs' => $template->selectRelation() !== null
                 ? array_values(array_map('intval', is_array($entries) ? $entries : []))

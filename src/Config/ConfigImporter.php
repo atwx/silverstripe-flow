@@ -273,6 +273,8 @@ class ConfigImporter
             }
         }
         $template->SignerResponsibility = $signer;
+        $blocks = $definition['blocks'] ?? '';
+        $template->Blocks = $blocks === true ? '*' : (is_string($blocks) ? $blocks : '');
         if ($template->Select && !MailTemplate::isListRelation((string) $workflow->CaseClass, $template->Select)) {
             throw new ConfigException("{$path} ({$code}): \"select\" must be a has_many or many_many relation.");
         }

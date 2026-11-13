@@ -23,6 +23,7 @@ use SilverStripe\Assets\Dev\TestAssetStore;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DataObject;
@@ -82,6 +83,15 @@ class LetterTest extends SapphireTest
             'Title' => 'Einleitung',
             'Body' => '<p><strong>Kurs</strong> {{Title}}</p>',
         ])->write();
+
+        $blocks = [
+            ['Lesen', '<p>Lesetest für {{Title}}</p>', 'Tests'],
+            ['Rechnen', '<p>Mathe</p>', 'Tests'],
+            ['Andere', '<p>nicht wählbar</p>', 'Sonstiges'],
+        ];
+        foreach ($blocks as [$title, $body, $category]) {
+            TextBlock::create(['Code' => $title, 'Title' => $title, 'Body' => $body, 'Category' => $category])->write();
+        }
 
         $this->course = TestCourse::create(['Title' => 'Paläographie <I>', 'Venue' => 'Marburg']);
         $statusID = Status::get()->filter(['Code' => 'draft', 'Workflow.Code' => 'course'])->first()?->ID;
@@ -150,6 +160,35 @@ class LetterTest extends SapphireTest
         $sub = CaseDocumentSubController::create()->setParentContext($parent, (int) $this->course->ID);
         $sub->setRequest($request);
         return $sub;
+    }
+
+    private function blockID(string $code): int
+    {
+        return (int) TextBlock::byCode($code)?->ID;
+    }
+
+    public function testChosenTextBlocks(): void
+    {
+        $html = DocumentService::singleton()->html($this->course, $this->letter(), $this->olga, [
+            'BlockIDs' => [$this->blockID('Lesen'), $this->blockID('Andere')],
+        ]);
+        $this->assertStringContainsString('<h2>Lesen</h2><p>Lesetest für Paläographie &lt;I&gt;</p>', $html);
+        $this->assertStringNotContainsString('nicht wählbar', $html, 'only blocks of the category');
+        $this->assertStringNotContainsString('Rechnen', $html);
+
+        $form = $this->sub('GET', ['template' => $this->letter()->ID])->documentForm();
+        $field = $form->Fields()->dataFieldByName('BlockIDs');
+        $this->assertInstanceOf(CheckboxSetField::class, $field);
+        $this->assertEqualsCanonicalizing(['Lesen', 'Rechnen'], array_values($field->getSource()));
+
+        $document = DocumentService::singleton()->create($this->course, $this->letter(), $this->olga, [
+            'BlockIDs' => [$this->blockID('Rechnen')],
+        ]);
+        $this->assertSame([$this->blockID('Rechnen')], $document->blockIDs());
+        $form = $this->sub('GET', ['document' => $document->ID])->documentForm();
+        $this->assertEquals([$this->blockID('Rechnen')], $form->Fields()->dataFieldByName('BlockIDs')?->getValue());
+        DocumentService::singleton()->regenerate($document, $this->olga);
+        $this->assertStringContainsString('<h2>Rechnen</h2><p>Mathe</p>', $this->renderer->lastHtml, 'kept');
     }
 
     public function testDialogCreatesEditsAndDeletesDocuments(): void

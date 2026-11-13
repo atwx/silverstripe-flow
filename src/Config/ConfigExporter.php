@@ -179,6 +179,9 @@ class ConfigExporter
             if ($template->SignerResponsibility) {
                 $entry['signer'] = (string) $template->SignerResponsibility;
             }
+            if ($template->Blocks) {
+                $entry['blocks'] = $template->Blocks === '*' ? true : (string) $template->Blocks;
+            }
             $documents[] = $entry;
         }
         if ($documents) {
