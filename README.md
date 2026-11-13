@@ -202,7 +202,7 @@ again unchanged.
 form and the record view by field group with the member's access levels (changes
 to fields that are not writable are reset on save), adds status and phase as
 columns and filters (cells of fields the member may not read stay empty, also in
-the export), offers "Change status" with the member's transitions, and shows the
+the export; several statuses can be chosen, any of them matches), offers "Change status" with the member's transitions, and shows the
 status history as timeline.
 
 ```php
@@ -234,7 +234,9 @@ configuration file:
 
 - the record action *Responsibility* (one select per responsibility) for members
   who may edit and have a role in the workflow,
-- a list column and a filter per responsibility (`Assignee_<code>`),
+- a list column and a filter per responsibility (`Assignee_<code>`; several
+  members can be chosen, any of them matches; a single ID from older links or
+  saved views still works),
 - the list view *My case files* (`?view=mine`),
 - the assignees in the header of record pages and every change in the timeline.
 
