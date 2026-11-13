@@ -248,6 +248,27 @@ $case->flowAssignee('responsible');   // ?Member
 Only candidates can be assigned; every change is stored (`AssignmentChange`).
 Assignments and their history are deleted with the case file.
 
+### Fields in the status dialog
+
+So that status, assignees and e.g. an appointment change in one step, the
+controller can show fields in *Change status*:
+
+```php
+class StudentController extends FlowCaseController
+{
+    private static array $status_dialog_fields = [
+        'responsibilities',            // all responsibilities (or 'responsibility:<code>')
+        'TestDate',                    // database fields of the case file
+    ];
+}
+```
+
+Responsibilities appear for members who may edit and have a role in the
+workflow, database fields only when the member may write them in the current
+status (field permissions). Inputs follow the field type (date, date and
+time, time, number, text). The values are saved first and the status changes
+afterwards, in one transaction: a refused change keeps nothing.
+
 ## Documents
 
 Templates ("Vorlagen") of a workflow turn into PDF documents of a case file:
