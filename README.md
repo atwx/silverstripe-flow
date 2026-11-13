@@ -1018,6 +1018,51 @@ SilverStripe\Control\Director:
 - Hooks on `Retention`: `onBeforeRetentionDelete($record, $rule)`,
   `onAfterRetentionDelete($class, $id, $rule)`.
 
+## Contact channels and contact persons
+
+Phone numbers, e-mail addresses and contact persons of any record
+(polymorphic owner), with sub-lists in the record view.
+
+```yaml
+App\Models\School:
+  extensions:
+    - Atwx\Flow\Contact\ContactChannelsExtension
+    - Atwx\Flow\Contact\ContactPersonsExtension
+  flow_contact_sync:            # optional: keep the first address/number here
+    email: 'Email'
+    phone: 'Phone'
+  flow_contact_free_types: true # optional: type entered freely instead of the lists
+
+App\Controllers\SchoolController:
+  extensions:
+    - Atwx\Flow\Contact\ContactChannelsControllerExtension   # sub-list "Kontaktwege"
+    - Atwx\Flow\Contact\ContactPersonsControllerExtension    # sub-list "Ansprechpersonen"
+
+Atwx\Flow\Contact\ContactChannel:
+  phone_types: ['Privat', 'Dienstlich', 'Mobil', 'Fax privat', 'Fax dienstlich']
+  fax_types: ['Fax privat', 'Fax dienstlich']
+  email_types: ['Privat', 'Dienstlich']
+
+Atwx\Flow\Contact\ContactPerson:
+  roles:                        # optional, code => label
+    invoices: 'Rechnungen'
+    visits: 'Besuche'
+```
+
+- **Contact channel** (`ContactChannel`): kind (phone or e-mail), type, value,
+  "for mailings" (e-mail only). Validated (e-mail format, phone characters),
+  sorted by kind and the order of the types, shown as mailto/tel links.
+- **Helpers on the owner**: `emailChannels($mailingsOnly)`,
+  `phoneChannels($types, $withFax)`, `getMailingEmails()` (`$MailingEmails`:
+  addresses for mailings, "; " separated), `phonesOfType($types)` (without
+  types: all except fax), `firstEmail()`, `firstPhone()`.
+- **Contact person** (`ContactPerson`): salutation, name, function, e-mail,
+  phone, mobile, notes and roles. `contactFor('invoices')` returns the first
+  person with that role, `contactsFor($role)` all of them.
+- Both are deleted with their owner and may be seen and edited by whoever may
+  see and edit the owner. Sub-list URLs: `<segment>/contactchannels/<ID>` and
+  `<segment>/contactpersons/<ID>`.
+
 ## Extension points
 
 | Hook | Where | Use |
