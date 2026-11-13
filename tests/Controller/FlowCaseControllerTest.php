@@ -15,6 +15,7 @@ use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
 use Atwx\SilverstripeFrontdeskKit\Forms\FieldLayout;
 use Atwx\SilverstripeFrontdeskKit\Table\ActionException;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DataObject;
@@ -316,5 +317,53 @@ class FlowCaseControllerTest extends SapphireTest
             TestCourseController::create()->recordActions($this->courseIn('draft'))
         );
         $this->assertNotContains('flowassign', $names);
+    }
+
+    public function testStatusDialogWithResponsibilitiesAndFields(): void
+    {
+        Config::modify()->set(
+            TestCourseController::class,
+            'status_dialog_fields',
+            ['responsibilities', 'Venue', 'Description', 'Bogus']
+        );
+        $organisers = Group::get()->find('Code', 'organisers');
+        $this->assertNotNull($organisers);
+        Permission::grant($organisers->ID, TestCourseController::singleton()->getPermissionCode('EDIT'));
+        $this->logInTo('organisers');
+        $me = Security::getCurrentUser();
+        $this->assertNotNull($me);
+        $course = $this->courseIn('draft');
+
+        $action = TestCourseController::create()->recordActions($course)[0];
+        $this->assertSame('flowstatus', $action->getName());
+        $this->assertSame(['responsibility_lead'], array_keys($action->getSelects()));
+        $this->assertSame(['field_Venue', 'field_Description'], array_keys($action->getInputs()));
+        $this->assertSame('Marburg', $action->getInputs()['field_Venue']['value']);
+
+        $action->run($course, 'with_speaker', '', [
+            'responsibility_lead' => (string) $me->ID,
+            'field_Venue' => 'Kassel',
+            'field_Description' => '',
+        ]);
+        $stored = TestCourse::get()->byID($course->ID);
+        $this->assertNotNull($stored);
+        $this->assertSame('Kassel', $stored->Venue);
+        $this->assertSame('with_speaker', Status::get()->byID((int) $stored->FlowStatusID)?->Code);
+        $lead = Responsibility::get()->filter(['Code' => 'lead', 'Workflow.Code' => 'course'])->first();
+        $this->assertNotNull($lead);
+        $this->assertSame($me->ID, AssignmentService::singleton()->assignee($stored, $lead)?->ID);
+
+        // A refused status change keeps nothing of the dialog.
+        $other = $this->courseIn('draft');
+        $action = TestCourseController::create()->recordActions($other)[0];
+        $copy = TestCourse::get()->byID($other->ID);
+        $this->assertNotNull($copy);
+        $copy->transitionTo('with_speaker');
+        try {
+            $action->run($other, 'with_speaker', '', ['field_Venue' => 'Fulda']);
+            $this->fail('refused');
+        } catch (ActionException) {
+        }
+        $this->assertSame('Marburg', TestCourse::get()->byID($other->ID)?->Venue);
     }
 }

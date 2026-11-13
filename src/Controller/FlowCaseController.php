@@ -73,6 +73,15 @@ abstract class FlowCaseController extends FrontdeskController
      */
     private array $levelsByStatus = [];
 
+    /**
+     * Fields in the "Change status" dialog, so status, assignees and e.g. an
+     * appointment change in one step: 'responsibilities' (all),
+     * 'responsibility:<code>' and database fields of the case file.
+     *
+     * @var array<int, string>
+     */
+    private static array $status_dialog_fields = [];
+
     protected function flowActor(): ?FlowActor
     {
         return MemberActor::current();
@@ -514,7 +523,21 @@ abstract class FlowCaseController extends FrontdeskController
         $actions = parent::defineRecordActions($record);
         $actor = $this->flowActor();
         if ($actor) {
-            $actions = array_merge($actions, FlowRecordActions::forActor($record, $actor));
+            $status = $this->statusDialogFields() === []
+                ? FlowRecordActions::statusAction($record, $actor)
+                : FlowRecordActions::statusAction(
+                    $record,
+                    $actor,
+                    fn (RecordAction $action) => $this->addStatusDialogFields($action, $record, $actor),
+                    fn (DataObject $case, array $values) => $this->applyStatusDialogFields($case, $actor, $values)
+                );
+            if ($status) {
+                $actions[] = $status;
+            }
+            $note = FlowRecordActions::noteAction($record, $actor);
+            if ($note) {
+                $actions[] = $note;
+            }
         }
         $document = $this->documentAction($record);
         if ($document) {
@@ -533,6 +556,123 @@ abstract class FlowCaseController extends FrontdeskController
             $actions[] = $revoke;
         }
         return $actions;
+    }
+
+    /**
+     * Fields offered in the "Change status" dialog (config status_dialog_fields):
+     * 'responsibilities' (all), 'responsibility:<code>' or database fields of
+     * the case file (e.g. an appointment). Only fields the member may write.
+     *
+     * @return array<int, string>
+     */
+    protected function statusDialogFields(): array
+    {
+        return array_values(array_map('strval', (array) static::config()->get('status_dialog_fields')));
+    }
+
+    /**
+     * Responsibilities shown in the status dialog, if the member may assign.
+     *
+     * @return array<int, Responsibility>
+     */
+    private function statusDialogResponsibilities(DataObject $record, FlowActor $actor): array
+    {
+        $workflow = $this->flowWorkflow();
+        if (!$workflow || !$this->canEdit() || $actor->flowRoleCodes($workflow, $record) === []) {
+            return [];
+        }
+        $fields = $this->statusDialogFields();
+        $all = in_array('responsibilities', $fields, true);
+        return array_values(array_filter(
+            $this->responsibilities(),
+            fn (Responsibility $responsibility) => $all
+                || in_array('responsibility:' . $responsibility->Code, $fields, true)
+        ));
+    }
+
+    /**
+     * Database fields shown in the status dialog: name => input type.
+     *
+     * @return array<string, string>
+     */
+    private function statusDialogDbFields(DataObject $record, FlowActor $actor): array
+    {
+        $types = [];
+        $schema = DataObject::getSchema();
+        foreach ($this->statusDialogFields() as $field) {
+            if ($field === 'responsibilities' || str_starts_with($field, 'responsibility:')) {
+                continue;
+            }
+            $spec = (string) $schema->fieldSpec($record::class, $field);
+            if ($spec === '' || !FieldAccess::singleton()->canWrite($record, $actor, $field)) {
+                continue;
+            }
+            $type = strtolower((string) preg_replace('/\(.*$/', '', $spec));
+            $types[$field] = match (true) {
+                $type === 'date' => 'date',
+                in_array($type, ['datetime', 'dbdatetime'], true) => 'datetime-local',
+                $type === 'time' => 'time',
+                in_array($type, ['int', 'decimal', 'float', 'double', 'currency', 'percentage'], true) => 'number',
+                default => 'text',
+            };
+        }
+        return $types;
+    }
+
+    private function addStatusDialogFields(RecordAction $action, DataObject $record, FlowActor $actor): void
+    {
+        foreach ($this->statusDialogResponsibilities($record, $actor) as $responsibility) {
+            $assignee = AssignmentService::singleton()->assignee($record, $responsibility);
+            $action->select(
+                'responsibility_' . $responsibility->Code,
+                (string) $responsibility->Title,
+                $responsibility->candidateOptions(),
+                $assignee ? (string) $assignee->ID : '',
+                _t(self::class . '.ASSIGN_NOBODY', '– nobody –')
+            );
+        }
+        foreach ($this->statusDialogDbFields($record, $actor) as $field => $type) {
+            $value = (string) $record->getField($field);
+            if ($value !== '' && $type === 'datetime-local') {
+                $value = date('Y-m-d\TH:i', (int) strtotime($value));
+            } elseif ($value !== '' && $type === 'date') {
+                $value = substr($value, 0, 10);
+            }
+            $action->input('field_' . $field, (string) $record->fieldLabel($field), $type, $value);
+        }
+    }
+
+    /**
+     * Saves the dialog's fields before the status changes (same transaction).
+     *
+     * @param array<string, mixed> $values
+     */
+    private function applyStatusDialogFields(DataObject $record, FlowActor $actor, array $values): void
+    {
+        $changed = false;
+        foreach ($this->statusDialogDbFields($record, $actor) as $field => $type) {
+            $value = trim((string) ($values['field_' . $field] ?? ''));
+            $new = $value === '' ? null : ($type === 'datetime-local' ? str_replace('T', ' ', $value) : $value);
+            if ($new !== null && $type === 'datetime-local' && strlen($new) === 16) {
+                $new .= ':00';
+            }
+            if ((string) $record->getField($field) !== (string) $new) {
+                $record->setField($field, $new);
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $record->write();
+        }
+        $service = AssignmentService::singleton();
+        foreach ($this->statusDialogResponsibilities($record, $actor) as $responsibility) {
+            $id = (int) ($values['responsibility_' . $responsibility->Code] ?? 0);
+            $member = $id ? Member::get()->byID($id) : null;
+            if ($id && (!$member || !array_key_exists((string) $id, $responsibility->candidateOptions()))) {
+                continue;
+            }
+            $service->assign($record, $responsibility, $member, Security::getCurrentUser());
+        }
     }
 
     /**
