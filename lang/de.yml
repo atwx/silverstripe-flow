@@ -521,6 +521,7 @@ de:
   Atwx\Flow\Intake\IntakeController:
     SEARCH: 'Suche'
     TAKE_OVER: 'Übernehmen'
+    CSV: 'CSV-Export'
     TAKEN_OVER: 'Der Eingang wurde übernommen.'
     DISCARD: 'Verwerfen'
     DISCARD_HELP: 'Der Eingang wird nicht übernommen und nach der Aufbewahrungsfrist gelöscht.'

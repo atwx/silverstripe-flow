@@ -434,4 +434,41 @@ class IntakeTest extends FunctionalTest
         $this->assertSame(['name', 'email', 'consent'], $schema['properties']['data']['required']);
         $this->assertSame(2, $schema['properties']['files']['properties']['photo']['maxItems']);
     }
+
+    public function testCsvExportWithNumberedRepeats(): void
+    {
+        $first = $this->json($this->submit('registration', ['data' => $this->registration([
+            'name' => '=HYPERLINK("x")',
+            'siblings' => [['first_name' => 'Max'], ['first_name' => 'Mia']],
+        ])]));
+        $this->submit('registration', ['data' => $this->registration(['name' => 'Karl', 'sports' => []])]);
+        $this->submit('feedback', ['data' => ['text' => 'x']], [], ApiClient::createWithKey('All', ['*'])[1]);
+
+        $this->logInWithPermission('FDK_INTAKE_VIEW');
+        $this->assertSame(400, $this->get('intake/csv')->getStatusCode(), 'a form type is needed');
+        $response = $this->get('intake/csv?Type=registration');
+        $this->assertSame('text/csv; charset=utf-8', $response->getHeader('Content-Type'));
+        $csv = (string) $response->getBody();
+        $this->assertStringStartsWith("\u{FEFF}", $csv);
+        $lines = array_map(
+            fn ($line) => str_getcsv($line, ';', '"', ''),
+            explode("\n", trim(substr($csv, 3)))
+        );
+        $this->assertSame([
+            'Reference', 'Received', 'Status', 'Name', 'E-Mail', 'Geburtstag', 'Jahre Englisch', 'sports',
+            'Einwilligung', 'Adresse: Ort', 'Geschwister 1: Vorname', 'Geschwister 2: Vorname', 'Files',
+        ], $lines[0]);
+        $this->assertCount(3, $lines, 'header and the two registrations, not the feedback');
+        $rows = array_column(array_slice($lines, 1), null, 0);
+        $ruth = $rows[$first['reference']];
+        $this->assertSame("'=HYPERLINK(\"x\")", $ruth[3], 'no formula');
+        $this->assertSame(['03.04.2012', '4', 'Golf', 'Yes', 'Hamburg', 'Max', 'Mia'], array_slice($ruth, 5, 7));
+        $karl = array_values(array_filter($rows, fn ($row) => $row[3] === 'Karl'))[0];
+        $this->assertSame(['', 'Max', ''], [$karl[7], $karl[10], $karl[11]]);
+
+        $submission = Submission::get()->find('Reference', $first['reference']);
+        $one = (string) $this->get('intake/csv/' . $submission->ID)->getBody();
+        $this->assertCount(2, explode("\n", trim($one)), 'one submission');
+        $this->assertStringContainsString('Geschwister 2: Vorname', $one);
+    }
 }
