@@ -104,6 +104,17 @@ class CaseDocumentSubController extends FrontdeskSubController
     }
 
     /**
+     * Deleting needs canWriteDocuments() (allowed_actions apply to the class
+     * that defines the method, so it is defined here again).
+     *
+     * @return HTTPResponse
+     */
+    public function delete(HTTPRequest $request)
+    {
+        return parent::delete($request);
+    }
+
+    /**
      * Streams the PDF of a document of this case file.
      */
     public function download(HTTPRequest $request): HTTPResponse

@@ -203,6 +203,7 @@ class LetterTest extends SapphireTest
 
         $this->assertTrue($document->canDelete());
         $this->assertTrue($this->sub()->canWriteDocuments());
+        $this->assertTrue($this->sub()->checkAccessAction('delete'), 'delete with canWriteDocuments');
         $this->logInAs(Member::create(['Email' => 'nobody@example.com']));
         $this->assertFalse($this->sub()->canWriteDocuments(), 'no role in the workflow');
         $this->assertFalse($document->canDelete());
