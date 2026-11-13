@@ -455,6 +455,28 @@ The old table is renamed to `_obsolete_Flow_FollowUp`. In code:
 
 `Note` stays the unchangeable note in the timeline of a case file.
 
+### Comment stream and deleting several
+
+Instead of a table, the comments of a record and the work list `/followups`
+can be shown as a stream: a meta line "date // editor // type", the date of
+appointments and follow-ups, the kind with the responsible member in bold
+("Wiedervorlage (Olga):") and the text with its line breaks. Open
+appointments come first, then important comments (both highlighted), then the
+rest, newest first. In `/followups` each entry links to its record; the view
+"Meine Termine" lists the appointments.
+
+```yaml
+Atwx\Flow\Controller\CommentSubController:
+  display: 'stream'          # default 'table'
+Atwx\Flow\Controller\FollowUpController:
+  display: 'stream'
+  stream_width: 'lg:w-1/2'   # width of the stream on large screens, '' for full width
+```
+
+Several comments are deleted at once with the checkboxes and "Ausgewählte
+löschen" (stream) or the bulk action "Löschen" in `/followups` (table and
+stream), after one confirmation and with the same rights as deleting one.
+
 ### Counters for navigation badges
 
 Static methods for the kit's `badge:` in `main_navigation`, counted for the

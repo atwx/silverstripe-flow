@@ -8,6 +8,7 @@ use Atwx\SilverstripeFrontdeskKit\Catalog\Catalogs;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\ORM\DB;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
@@ -179,6 +180,87 @@ class Comment extends DataObject
         );
     }
 
+    /**
+     * Order of the comment stream: open appointments (by date), then the
+     * important comments, then the rest; within those newest first.
+     *
+     * @template T of DataList
+     * @param T $list
+     * @return T
+     */
+    public static function streamOrder(DataList $list): DataList
+    {
+        $appointment = "\"Flow_Comment\".\"Kind\" = 'appointment' AND \"Flow_Comment\".\"IsDone\" = 0";
+        return $list->orderBy(
+            "CASE WHEN {$appointment} THEN 0 WHEN \"Flow_Comment\".\"Important\" = 1 THEN 1 ELSE 2 END ASC, "
+            . "CASE WHEN {$appointment} THEN \"Flow_Comment\".\"DueDate\" END ASC, "
+            . "CASE WHEN {$appointment} THEN \"Flow_Comment\".\"DueTime\" END ASC, "
+            . '"Flow_Comment"."Created" DESC, "Flow_Comment"."ID" DESC'
+        );
+    }
+
+    /**
+     * Highlighted in the stream: open appointments and important comments.
+     */
+    public function getStreamHighlight(): bool
+    {
+        return ($this->Kind === self::APPOINTMENT && !$this->IsDone) || $this->Important;
+    }
+
+    /**
+     * Meta line of the stream: "13.11.2026 // Olga Organisation // Telefonat".
+     */
+    public function getStreamMeta(): string
+    {
+        $parts = [date('d.m.Y', (int) strtotime((string) $this->Created))];
+        $editor = $this->LastEditedByID ? $this->LastEditedBy() : $this->CreatedBy();
+        if ($editor->exists()) {
+            $parts[] = $editor->getName();
+        }
+        $type = $this->Type();
+        if ($type->exists()) {
+            $parts[] = $type->getLabel();
+        }
+        return implode(' // ', $parts);
+    }
+
+    /**
+     * Kind and responsible member in front of the text, except for memos:
+     * "Follow-up (Olga Organisation):".
+     */
+    public function getStreamLead(): string
+    {
+        if (in_array((string) $this->Kind, ['', self::MEMO], true)) {
+            return '';
+        }
+        $member = $this->Member();
+        return $this->getKindLabel() . ($member->exists() ? ' (' . $member->getName() . ')' : '') . ':';
+    }
+
+    /**
+     * Date line: "Termin: 14.11.2026 10:00" or "Fällig: 14.11.2026", "" without a date.
+     */
+    public function getStreamDue(): string
+    {
+        $due = $this->getDueLabel();
+        if ($due === '') {
+            return '';
+        }
+        $label = $this->Kind === self::APPOINTMENT
+            ? _t(self::class . '.STREAM_APPOINTMENT', 'Appointment')
+            : _t(self::class . '.STREAM_DUE', 'Due');
+        $done = $this->IsDone ? ' (' . _t(self::class . '.STREAM_DONE', 'done') . ')' : '';
+        return $label . ': ' . $due . $done;
+    }
+
+    /**
+     * The text with line breaks, escaped.
+     */
+    public function getTextHtml(): DBHTMLText
+    {
+        return DBHTMLText::create()->setValue(nl2br(htmlspecialchars((string) $this->Text), false));
+    }
+
     public function isTask(): bool
     {
         return in_array((string) $this->Kind, self::TASK_KINDS, true);
@@ -212,6 +294,15 @@ class Comment extends DataObject
         $member = $this->Member();
         $prefix = $this->getKindLabel() . ($member->exists() ? ' (' . $member->getName() . ')' : '');
         return $prefix . ': ' . $text;
+    }
+
+    /**
+     * Link to the record of the comment, "" when no list shows it.
+     */
+    public function getRecordLink(): string
+    {
+        $record = $this->Record();
+        return $record->exists() ? (string) FollowUpController::recordLink($record) : '';
     }
 
     public function getRecordTitle(): string

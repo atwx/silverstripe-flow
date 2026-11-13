@@ -7,6 +7,8 @@ use Atwx\Flow\Model\FlowRole;
 use Atwx\Flow\Model\Workflow;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskSubController;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
+use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextareaField;
@@ -15,6 +17,7 @@ use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
+use SilverStripe\Security\SecurityToken;
 
 /**
  * Comments of a record: list (upcoming dates first, then important ones, then
@@ -28,6 +31,17 @@ class CommentSubController extends FrontdeskSubController
     private static string $url_segment = 'comments';
 
     private static string $title = 'Kommentare';
+
+    /**
+     * 'table': the comments as a sub-list table; 'stream': as a stream
+     * (meta line, kind and responsible member, text; appointments and
+     * important ones first and highlighted).
+     */
+    private static string $display = 'table';
+
+    private static array $allowed_actions = [
+        'deleteselected' => '->canEdit',
+    ];
 
     /**
      * The record the comments belong to (null when the parent does not exist).
@@ -56,9 +70,70 @@ class CommentSubController extends FrontdeskSubController
     protected function getBaseQuery(): DataList
     {
         $record = $this->commentRecord();
-        return Comment::inListOrder($record
-            ? Comment::forRecord($record)
-            : Comment::get()->filter('ID', 0));
+        $list = $record ? Comment::forRecord($record) : Comment::get()->filter('ID', 0);
+        return $this->isStream() ? Comment::streamOrder($list) : Comment::inListOrder($list);
+    }
+
+    public function isStream(): bool
+    {
+        return static::config()->get('display') === 'stream';
+    }
+
+    /**
+     * The comments as a stream for HTMX requests in stream display.
+     *
+     * @return mixed
+     */
+    public function index(HTTPRequest $request)
+    {
+        if ($this->isStream() && $this->isHtmxRequest() && !$this->isTab()) {
+            return $this->renderStream();
+        }
+        return parent::index($request);
+    }
+
+    /**
+     * Id of the form that deletes the selected comments.
+     */
+    // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- template method
+    public function StreamBulkForm(): string
+    {
+        return 'fdk-comment-bulk-' . $this->getParentID();
+    }
+
+    /**
+     * Deletes the selected comments (ids[], POST with security token); only
+     * those the member may delete.
+     */
+    public function deleteselected(HTTPRequest $request): HTTPResponse
+    {
+        if (!$request->isPOST() || !SecurityToken::inst()->checkRequest($request)) {
+            return $this->httpError(400);
+        }
+        $count = 0;
+        foreach ((array) $request->postVar('ids') as $id) {
+            $comment = $this->findRecord((int) $id, 'canDelete');
+            if ($comment) {
+                $this->beforeDelete($comment);
+                $comment->delete();
+                $this->afterDelete($comment);
+                $count++;
+            }
+        }
+        $message = _t(self::class . '.DELETED_COUNT', '{count} comments deleted.', ['count' => $count]);
+        if ($this->isHtmxRequest()) {
+            return $this->renderStream($message);
+        }
+        $this->flash($message);
+        return $this->redirect($this->afterSaveLink());
+    }
+
+    private function renderStream(string $message = ''): HTTPResponse
+    {
+        return $this->renderPartial('Atwx\\Flow\\Includes\\CommentStream', [
+            'Items' => $this->getItems(),
+            'Message' => $message,
+        ]);
     }
 
     protected function defineColumns(): ColumnCollection
