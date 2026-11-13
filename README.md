@@ -778,6 +778,128 @@ Path segments in braces are parameters (`submissions/{reference}` →
 (title and version: `OpenApi.title`, `OpenApi.version`; hook
 `updateOpenApi`).
 
+## Inbox (form submissions)
+
+External forms (a website, friendlydesk) push submissions into the inbox
+("Eingang") through the API instead of the site polling them. Staff look at
+them, correct them and take them over into the project's records; a
+retention period deletes them afterwards. Form types are declared in config:
+
+```yaml
+Atwx\Flow\Intake\IntakeService:
+  types:
+    application:                         # POST api/intake/application, scope intake:application
+      title: Kurzbewerbung
+      reference_prefix: KB               # KB-2026-0001
+      summary: '{{child.first_name}} {{child.last_name}}'   # list column, mail placeholder
+      reply_to: parent_email             # Reply-To of the notification
+      fields:
+        parent_email: { type: email, title: 'E-Mail der Eltern', required: true }
+        child:
+          type: group
+          title: Kind
+          fields:
+            first_name: { type: string, title: Vorname, required: true, max: 100 }
+            birthday: { type: date, title: Geburtsdatum }
+        english_years: { type: integer, title: 'Jahre Englisch', min: 0, max: 20 }
+        sports: { type: choice, multiple: true, options: { tennis: Tennis, golf: Golf } }
+        siblings:
+          type: repeat
+          title: Geschwister
+          max_items: 6
+          fields: { first_name: { type: string, required: true } }
+        consent: { type: boolean, accepted: true, required: true }
+      files:
+        reports: { title: Zeugnisse, types: [pdf, jpg, png], max_size: 10MB, max_count: 3 }
+      notify:
+        to: 'office@example.org'         # list or comma separated
+        subject: 'Neue Kurzbewerbung {{Reference}}'
+        block: Kurzbewerbung_Eingang     # text block as mail body (optional)
+        fields: [child.first_name]       # the only data allowed in the mail: {{Field.child.first_name}}
+      receipt: { hours: 24 }             # receipt PDF link in the answer (optional)
+      retention: { new: 0, taken_over: 30, discarded: 30 }   # days after the last status change; 0 = keep
+      takeover: App\Intake\ApplicationTakeover
+```
+
+- **Field types:** `string` (`max`, default 255), `text` (default 10000),
+  `email`, `date` (`YYYY-MM-DD`), `integer`/`number` (`min`, `max`),
+  `boolean` (`accepted: true` = must be true), `choice` (`options`,
+  `multiple`), `list` (strings), `group` (object with `fields`) and `repeat`
+  (list of objects with `fields`, `max_items`). Each with `title`,
+  `required`, `help`. Unknown fields are refused, so nothing unexpected is
+  stored.
+- **Request:** `POST api/intake/<type>` with a key that has the scope
+  `intake:<type>`. JSON:
+  `{"data": {…}, "files": {"reports": [{"name": "zeugnis.pdf", "content": "<base64>"}]}}`,
+  or `multipart/form-data` with a part `data` (the JSON object) and file parts
+  named after the file fields (`reports[]`). One call carries the whole
+  submission. The body limit follows from the file limits.
+- **Files:** the extension must be listed in `types`, and the content must
+  match it (checked with finfo, `IntakeService.mime_types`). Files are stored
+  as protected (unpublished) files named after the field
+  (`intake/<type>/<reference>/reports-1.pdf`); the submitter's file name is
+  only kept on the submission.
+- **Answer:** 201 `{"reference": "KB-2026-0001", "status": "new", "receipt":
+  {"url": "…/flow/receipt/<token>", "expires": "…"}}`. 422 lists field errors
+  by path (`child.first_name`, `siblings.1.first_name`, `files.reports.0`).
+- **Idempotency:** with the header `Idempotency-Key`, a repeated call of the
+  same client returns the first submission (200, header
+  `Idempotent-Replayed: true`) instead of creating another; the same key for
+  another form type answers 409.
+- **Notification:** a mail to `notify.to` after the submission is stored. A
+  failure is logged and shown on the submission; the submission is accepted
+  anyway. The body is the text block `notify.block` (maintained by the staff)
+  or a short default. Placeholders: `{{Reference}}`, `{{Type}}`,
+  `{{Summary}}`, `{{Link}}` (to the inbox), `{{Date}}` and
+  `{{Field.<path>}}` only for the paths in `notify.fields`, so personal data
+  only goes out where the type allows it.
+- **Receipt:** `flow/receipt/<token>` renders a PDF of the submission
+  (template `Atwx\Flow\Intake\IntakeReceipt`, or `receipt.template`;
+  `receipt.block` adds a text block on top) without login. The token is
+  random, stored as a hash and valid for `receipt.hours` (24). Hook
+  `updateReceiptData`.
+- **Inbox:** route `Atwx\Flow\Intake\IntakeController`
+  (`'intake//$Action/$ID/$OtherID'`) and grant `FDK_INTAKE_VIEW` (view) or
+  `FDK_INTAKE_EDIT` (correct, take over, discard, delete); a type may require
+  an additional permission code (`permission`). The list filters by form,
+  status and search; the record shows the data by the form type, the files
+  (protected download) and what it was taken over into. *Edit* corrects the
+  data in a form generated from the type.
+- **Takeover:** the type's handler implements `TakeoverHandler`:
+
+  ```php
+  class ApplicationTakeover implements TakeoverHandler
+  {
+      public function choices(Submission $submission): array
+      {
+          // offered in the dialog, e.g. matching families
+          return ['new' => 'Neue Familie'] + $this->matchingFamilies($submission);
+      }
+
+      public function takeOver(Submission $submission, ?string $choice, Member $member): array
+      {
+          $family = $choice === 'new' ? Family::create() : Family::get()->byID((int) $choice);
+          // … map $submission->value('child.first_name') etc.
+          foreach ($submission->filesOf('reports') as $file) {
+              $submission->claimFile($file);       // keep it: retention leaves it alone
+              $file->ParentID = …; $file->write();
+          }
+          return [$family, $child];              // linked from the submission
+      }
+  }
+  ```
+
+  It runs in a transaction; `TakeoverException` refuses with a message. The
+  submission is then *taken over*, with who and when and links to the
+  records (`updateTakeoverLink` on the controller for their URLs). *Discard*
+  marks it as not taken over.
+- **Retention:** `sake flow:retention` (daily cron) deletes submissions with
+  their files and folders once `retention.<status>` days have passed since
+  the last status change. Claimed files stay.
+- **Hooks:** `onAfterSubmit(Submission)`, `updateNotifyEmail(Email,
+  Submission)`, `onAfterTakeOver(Submission, Member)`,
+  `updateReceiptData(ArrayData, Submission)` on `IntakeService`.
+
 ## Extension points
 
 | Hook | Where | Use |
