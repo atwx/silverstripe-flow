@@ -44,11 +44,79 @@ class FollowUpController extends FrontdeskController
     protected static ?array $caseControllerCache = null;
 
     /**
+     * Days ahead that countAppointments() counts (0: all upcoming ones).
+     */
+    private static int $badge_appointment_days = 7;
+
+    /**
+     * Badge of the navigation: the current member's open follow-ups and to-dos
+     * due today or earlier (the view "Mine, due").
+     *
+     *   badge: 'Atwx\Flow\Controller\FollowUpController::countDue'
+     */
+    public static function countDue(): int
+    {
+        $me = (int) Security::getCurrentUser()?->ID;
+        if (!$me) {
+            return 0;
+        }
+        return self::singleton()->getBaseList()
+            ->filter(['MemberID' => $me, 'DueDate:LessThanOrEqual' => date('Y-m-d')])
+            ->count();
+    }
+
+    /**
+     * Badge: the current member's open to-dos (any date).
+     */
+    public static function countTodos(): int
+    {
+        $me = (int) Security::getCurrentUser()?->ID;
+        if (!$me) {
+            return 0;
+        }
+        return self::singleton()->getBaseList()->filter(['MemberID' => $me, 'Kind' => Comment::TODO])->count();
+    }
+
+    /**
+     * Badge: the current member's appointments from today on, within
+     * badge_appointment_days.
+     */
+    public static function countAppointments(): int
+    {
+        $me = (int) Security::getCurrentUser()?->ID;
+        if (!$me) {
+            return 0;
+        }
+        $list = self::singleton()->openComments()->filter([
+            'Kind' => Comment::APPOINTMENT,
+            'MemberID' => $me,
+            'DueDate:GreaterThanOrEqual' => date('Y-m-d'),
+        ]);
+        $days = (int) static::config()->get('badge_appointment_days');
+        if ($days > 0) {
+            $list = $list->filter('DueDate:LessThanOrEqual', date('Y-m-d', (int) strtotime('+' . $days . ' days')));
+        }
+        return $list->count();
+    }
+
+    /**
      * Open follow-ups and to-dos of records whose list the member may view.
      *
      * @return DataList<Comment>
      */
     protected function getBaseList(): DataList
+    {
+        return $this->openComments()
+            ->filter('Kind', Comment::TASK_KINDS)
+            ->sort(['DueDate' => 'ASC', 'DueTime' => 'ASC', 'Created' => 'ASC', 'ID' => 'ASC']);
+    }
+
+    /**
+     * Comments not done, of any kind, of records whose list the member may view.
+     *
+     * @return DataList<Comment>
+     */
+    protected function openComments(): DataList
     {
         $classes = [];
         foreach (self::recordControllers() as $class => $controller) {
@@ -56,15 +124,8 @@ class FollowUpController extends FrontdeskController
                 $classes[] = $class;
             }
         }
-        // PHPStan reports static<T> from DataList::filter() as incompatible with DataList<T>.
         // @phpstan-ignore return.type
-        return Comment::get()
-            ->filter([
-                'IsDone' => false,
-                'Kind' => Comment::TASK_KINDS,
-                'RecordClass' => $classes ?: ['-'],
-            ])
-            ->sort(['DueDate' => 'ASC', 'DueTime' => 'ASC', 'Created' => 'ASC', 'ID' => 'ASC']);
+        return Comment::get()->filter(['IsDone' => false, 'RecordClass' => $classes ?: ['-']]);
     }
 
     /**

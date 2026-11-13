@@ -455,6 +455,25 @@ The old table is renamed to `_obsolete_Flow_FollowUp`. In code:
 
 `Note` stays the unchangeable note in the timeline of a case file.
 
+### Counters for navigation badges
+
+Static methods for the kit's `badge:` in `main_navigation`, counted for the
+current member over the records whose lists they may view (0 when logged out):
+
+```yaml
+Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController:
+  main_navigation:
+    followups:
+      title: 'Wiedervorlagen'
+      segment: 'followups'
+      link: 'followups?view=mine-due'
+      badge: 'Atwx\Flow\Controller\FollowUpController::countDue'   # mine, due today or earlier
+```
+
+`countTodos()` counts the open to-dos, `countAppointments()` the appointments
+from today on within `FollowUpController.badge_appointment_days` (default 7,
+0 for all upcoming ones).
+
 ### Daily mail about due follow-ups
 
 `sake flow:followup-digest` sends every member one mail with their open

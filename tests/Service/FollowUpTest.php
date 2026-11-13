@@ -18,6 +18,7 @@ use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DataObject;
@@ -148,6 +149,42 @@ class FollowUpTest extends SapphireTest
             }
         }
         $this->assertStringContainsString('test-courses/view/' . $course->ID, $html);
+    }
+
+    public function testBadgeCountersOfTheCurrentMember(): void
+    {
+        $course = $this->course();
+        $due = FollowUpController::countDue();
+        $todos = FollowUpController::countTodos();
+        $appointments = FollowUpController::countAppointments();
+        $comment = function (string $kind, string $date, int $member, bool $done = false) use ($course): void {
+            Comment::create([
+                'Kind' => $kind, 'RecordClass' => TestCourse::class, 'RecordID' => $course->ID, 'Text' => 'x',
+                'DueDate' => $date, 'MemberID' => $member, 'IsDone' => $done,
+            ])->write();
+        };
+        $me = (int) $this->olga->ID;
+        $comment(Comment::FOLLOW_UP, date('Y-m-d', strtotime('-1 day')), $me);
+        $comment(Comment::TODO, date('Y-m-d'), $me);
+        $comment(Comment::TODO, '2099-01-01', $me);
+        $comment(Comment::FOLLOW_UP, date('Y-m-d'), 0);
+        $comment(Comment::FOLLOW_UP, date('Y-m-d'), $me, true);
+        $comment(Comment::APPOINTMENT, date('Y-m-d', strtotime('+2 days')), $me);
+        $comment(Comment::APPOINTMENT, date('Y-m-d', strtotime('+30 days')), $me);
+        $comment(Comment::APPOINTMENT, date('Y-m-d', strtotime('-1 day')), $me);
+
+        $this->assertSame($due + 2, FollowUpController::countDue(), 'mine, due today or earlier, open');
+        $this->assertSame($todos + 2, FollowUpController::countTodos());
+        $this->assertSame($appointments + 1, FollowUpController::countAppointments(), 'next 7 days');
+        Config::modify()->set(FollowUpController::class, 'badge_appointment_days', 0);
+        $this->assertSame($appointments + 2, FollowUpController::countAppointments(), 'all upcoming');
+
+        $this->logOut();
+        $this->assertSame([0, 0, 0], [
+            FollowUpController::countDue(),
+            FollowUpController::countTodos(),
+            FollowUpController::countAppointments(),
+        ]);
     }
 
     public function testFollowUpsGoWithTheCaseFile(): void
