@@ -263,6 +263,19 @@ class ConfigImporter
         $template->Title = $this->string($definition, 'title', $path);
         $template->DocumentTitle = (string) ($definition['document_title'] ?? '');
         $template->Body = $this->string($definition, 'body', $path);
+        $template->Select = (string) ($definition['select'] ?? '');
+        $template->FreeText = (bool) ($definition['free_text'] ?? false);
+        $signer = (string) ($definition['signer'] ?? '');
+        if ($signer !== '') {
+            $exists = Responsibility::get()->filter(['WorkflowID' => $workflow->ID, 'Code' => $signer])->exists();
+            if (!$exists) {
+                throw new ConfigException("{$path} ({$code}): unknown responsibility \"{$signer}\" in \"signer\".");
+            }
+        }
+        $template->SignerResponsibility = $signer;
+        if ($template->Select && !MailTemplate::isListRelation((string) $workflow->CaseClass, $template->Select)) {
+            throw new ConfigException("{$path} ({$code}): \"select\" must be a has_many or many_many relation.");
+        }
         $template->Sort = $index + 1;
         $this->save($template, "{$path} ({$code})");
     }

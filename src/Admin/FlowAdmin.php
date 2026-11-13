@@ -2,6 +2,7 @@
 
 namespace Atwx\Flow\Admin;
 
+use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Security\FlowPermissions;
 use SilverStripe\Admin\ModelAdmin;
@@ -19,6 +20,7 @@ class FlowAdmin extends ModelAdmin
 
     private static array $managed_models = [
         Workflow::class,
+        TextBlock::class,
     ];
 
     private static array $required_permission_codes = [

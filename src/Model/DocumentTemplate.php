@@ -13,11 +13,20 @@ use SilverStripe\ORM\DataObject;
  * {{Assignee.responsible}}, {{Today}} or {{Me.Name}} (see Placeholders).
  * Documents are created from it as PDF in the case file.
  *
+ * In the dialog "Create document" the member can enter a free text
+ * ({{FreeText}}, with FreeText on), choose entries of a list of the case file
+ * (Select = relation name; {{#Selected}}…{{/Selected}}) and the signing member
+ * ({{Signer.Name}}; default: the member of SignerResponsibility, else the
+ * current member).
+ *
  * @property string $Code
  * @property string $Title
  * @property string $DocumentTitle
  * @property string $Body
  * @property int $Sort
+ * @property ?string $Select
+ * @property bool $FreeText
+ * @property ?string $SignerResponsibility
  * @property int $WorkflowID
  * @method Workflow Workflow()
  */
@@ -33,6 +42,9 @@ class DocumentTemplate extends DataObject
         'DocumentTitle' => 'Varchar(255)',
         'Body' => 'HTMLText',
         'Sort' => 'Int',
+        'Select' => 'Varchar(100)',
+        'FreeText' => 'Boolean',
+        'SignerResponsibility' => 'Varchar(64)',
     ];
 
     private static array $has_one = [
@@ -61,13 +73,36 @@ class DocumentTemplate extends DataObject
             ->setDescription(_t(
                 self::class . '.BODY_DESCRIPTION',
                 'HTML with placeholders: {{Field}}, {{Relation.Field}}, {{Flow.<custom field>}}, '
-                . '{{Assignee.<responsibility>}}, {{Status}}, {{Today}}, {{Me.Name}}.'
+                . '{{Assignee.<responsibility>}}, {{Status}}, {{Today}}, {{Me.Name}}, {{Signer.Name}}, '
+                . '{{FreeText}}, {{Block.<code>}}, {{#Relation sort=Field filter=Field}}…{{/Relation}}, '
+                . '{{#Selected}}…{{/Selected}}.'
             )));
         $fields->dataFieldByName('DocumentTitle')?->setDescription(_t(
             self::class . '.DOCUMENT_TITLE_DESCRIPTION',
             'Title of the created document, with placeholders; default: the title of the template.'
         ));
         return $fields;
+    }
+
+    /**
+     * The relation whose entries are chosen in the dialog, if any.
+     */
+    public function selectRelation(): ?string
+    {
+        $relation = trim((string) $this->Select);
+        return $relation !== '' ? $relation : null;
+    }
+
+    /**
+     * The responsibility whose member signs by default, if set and known.
+     */
+    public function signerResponsibility(): ?Responsibility
+    {
+        $code = trim((string) $this->SignerResponsibility);
+        if ($code === '') {
+            return null;
+        }
+        return Responsibility::get()->filter(['WorkflowID' => (int) $this->WorkflowID, 'Code' => $code])->first();
     }
 
     public function validate(): ValidationResult

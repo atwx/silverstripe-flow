@@ -170,6 +170,15 @@ class ConfigExporter
                 $entry['document_title'] = $template->DocumentTitle;
             }
             $entry['body'] = (string) $template->Body;
+            if ($template->Select) {
+                $entry['select'] = (string) $template->Select;
+            }
+            if ($template->FreeText) {
+                $entry['free_text'] = true;
+            }
+            if ($template->SignerResponsibility) {
+                $entry['signer'] = (string) $template->SignerResponsibility;
+            }
             $documents[] = $entry;
         }
         if ($documents) {
