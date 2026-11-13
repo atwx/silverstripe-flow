@@ -699,8 +699,10 @@ Atwx\Flow\Api\ApiResources:
   `GET flow-api/file/<resource>/<id>/<field>`. A list answers
   `{total, limit, offset, items}`; `limit` is at most 500
   (`ApiController.max_limit`).
-- **Token:** header `Authorization: Bearer <token>` or `X-Api-Token: <token>`.
-  A wrong token answers 401. Without any token configured, the whole API
+- **Key:** header `Authorization: Bearer <key>` or `X-Api-Token: <key>`, an
+  API client's key with the scope `resources:<resource>` (or `resources:*`), or
+  a token from `token_env`, which may call everything. A wrong key answers
+  401, a missing scope 403. Without any active client or token, the whole API
   answers 404.
 - **What goes out:** only listed fields and resources. A resource without
   `get` or `list` is only reachable nested inside another one, and an unknown
@@ -709,6 +711,72 @@ Atwx\Flow\Api\ApiResources:
 - **Values:** numbers and booleans as JSON types, dates as `YYYY-MM-DD`.
   Getters are only called when they are listed, and nesting stops after
   `ApiResources.max_depth` levels (default 6).
+
+## API clients, log and gateway
+
+Other systems call the API with their own key. Clients are records (CMS
+section *Workflows → API clients*, or `sake flow:api-client`):
+
+```bash
+sake flow:api-client "Website" --scope=intake:application --rate=30
+sake flow:api-client --renew=3     # new key, the old one stops working
+sake flow:api-client --list
+```
+
+- **Key:** `fk_<prefix>_<secret>`, shown once after creating or renewing it.
+  Only its SHA-256 hash is stored.
+- **Scopes:** one per line: exact (`intake:application`), a prefix
+  (`intake:*`) or everything (`*`). Tokens from `ApiController.token_env`
+  still work and have all scopes, so existing setups keep running.
+- **Rate limit:** requests per minute per client (`RateLimit`; 0 =
+  `ApiClient.default_rate_limit`, 60; -1 = unlimited). Over it: 429 with
+  `Retry-After: 60`. Tokens from the environment are unlimited.
+- **Log:** every request lands in `ApiLog` with the client, the operation
+  (e.g. `intake.application.create`, `resources:family:get`), method, status,
+  duration and IP. Payloads, query strings and record keys are never logged,
+  because requests may carry personal data. `sake flow:retention` (daily
+  cron) deletes entries after `ApiLog.retention_days` (90).
+- **Errors:** always JSON: `{"error": "…"}`, with field errors for 422:
+  `{"error": "Validation failed", "fields": {"email": "Required"}}`. Status
+  codes: 401 wrong key, 403 missing scope, 404, 405, 413 body too large
+  (`ApiRuntime.max_body_bytes`, 25 MB, or per operation), 422, 429, 500
+  (details only in the server log).
+
+Projects add their own operations below `api/` with an endpoint:
+
+```php
+class PortalEndpoint implements ApiEndpoint
+{
+    public function operations(): array
+    {
+        return [
+            ApiOperation::create('portal.login', 'POST', 'portal/login', 'portal:login',
+                function (HTTPRequest $request, array $params, ApiClient $client) {
+                    $data = json_decode((string) $request->getBody(), true);
+                    if (empty($data['number'])) {
+                        throw ApiException::invalid(['number' => 'Required']);
+                    }
+                    return ['allowed' => true];          // JSON, status 200
+                })
+                ->summary('Check a portal login')
+                ->requestSchema(['type' => 'object', 'required' => ['number']]),
+        ];
+    }
+}
+```
+
+```yaml
+Atwx\Flow\Api\ApiGateway:
+  endpoints:
+    portal: App\Api\PortalEndpoint
+```
+
+Path segments in braces are parameters (`submissions/{reference}` →
+`$params['reference']`). `status(201)` sets the success status;
+`maxBodyBytes()` the body limit. `GET api/openapi.json` returns an OpenAPI
+3.1 document of the operations and read resources the calling key may use
+(title and version: `OpenApi.title`, `OpenApi.version`; hook
+`updateOpenApi`).
 
 ## Extension points
 

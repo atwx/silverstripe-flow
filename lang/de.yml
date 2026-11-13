@@ -469,3 +469,26 @@ de:
   Atwx\Flow\Model\MailDownload:
     SINGULARNAME: Download
     PLURALNAME: Downloads
+  Atwx\Flow\Api\ApiClient:
+    SINGULARNAME: 'API-Zugang'
+    PLURALNAME: 'API-Zugänge'
+    db_Title: 'Bezeichnung'
+    db_Scopes: 'Berechtigungen (Scopes)'
+    db_Active: 'Aktiv'
+    db_RateLimit: 'Anfragen pro Minute'
+    db_KeyPrefix: 'Schlüssel'
+    db_LastUsed: 'Zuletzt benutzt'
+    db_Notes: 'Notizen'
+    SCOPES_HELP: 'Eine pro Zeile, z. B. intake:application, intake:* oder *'
+    RATE_HELP: 'Anfragen pro Minute; 0 = Standard ({limit}), -1 = unbegrenzt'
+    KEY_ONCE: 'Der Schlüssel wird nur jetzt angezeigt. Bitte kopieren:'
+    RENEW: 'Neuen Schlüssel erzeugen (der alte gilt dann nicht mehr)'
+  Atwx\Flow\Api\ApiLog:
+    SINGULARNAME: 'API-Anfrage'
+    PLURALNAME: 'API-Protokoll'
+    db_ClientName: 'Zugang'
+    db_Operation: 'Aufruf'
+    db_Method: 'Methode'
+    db_Status: 'Status'
+    db_Duration: 'Dauer (ms)'
+    db_IP: 'IP'

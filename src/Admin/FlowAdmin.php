@@ -2,6 +2,8 @@
 
 namespace Atwx\Flow\Admin;
 
+use Atwx\Flow\Api\ApiClient;
+use Atwx\Flow\Api\ApiLog;
 use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Security\FlowPermissions;
@@ -21,6 +23,8 @@ class FlowAdmin extends ModelAdmin
     private static array $managed_models = [
         Workflow::class,
         TextBlock::class,
+        ApiClient::class,
+        ApiLog::class,
     ];
 
     private static array $required_permission_codes = [

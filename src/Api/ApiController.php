@@ -2,14 +2,11 @@
 
 namespace Atwx\Flow\Api;
 
-use Psr\Log\LoggerInterface;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Control\HTTPStreamResponse;
-use SilverStripe\Core\Environment;
-use SilverStripe\Core\Injector\Injector;
 use SilverStripe\ORM\DataObject;
 
 /**
@@ -20,10 +17,12 @@ use SilverStripe\ORM\DataObject;
  *   GET flow-api/<resource>?<param>=…        list (list: true; limit, offset)
  *   GET flow-api/file/<resource>/<id>/<key>  a file field of a record
  *
- * Every request needs the token: header "Authorization: Bearer <token>" or
- * "X-Api-Token: <token>". Tokens come from the environment variables named in
- * ApiController.token_env (without any, the API answers 404). Resources and
- * their fields: ApiResources.
+ * Every request needs a key: header "Authorization: Bearer <key>" or
+ * "X-Api-Token: <key>", either of an ApiClient with the scope
+ * "resources:<resource>" or a token from the environment variables named in
+ * ApiController.token_env (all scopes). Without any key source the API answers
+ * 404. Requests are logged (ApiLog) and rate limited: ApiRuntime. Resources
+ * and their fields: ApiResources.
  */
 class ApiController extends Controller
 {
@@ -51,14 +50,23 @@ class ApiController extends Controller
 
     public function resource(HTTPRequest $request): HTTPResponse
     {
-        $denied = $this->checkToken($request);
-        if ($denied) {
-            return $denied;
-        }
-        $resources = ApiResources::singleton();
         $name = (string) $request->param('Resource');
-        $definition = $resources->definition($name);
         $id = (string) $request->param('ID');
+        return ApiRuntime::singleton()->run(
+            $request,
+            'resources:' . $name . ($id !== '' ? ':get' : ':list'),
+            'resources:' . $name,
+            fn () => $this->resourceData($request, $name, $id)
+        );
+    }
+
+    /**
+     * @return array<mixed>|HTTPResponse
+     */
+    private function resourceData(HTTPRequest $request, string $name, string $id): array|HTTPResponse
+    {
+        $resources = ApiResources::singleton();
+        $definition = $resources->definition($name);
         if (!$definition) {
             return $this->error(404, 'Unknown resource');
         }
@@ -68,7 +76,7 @@ class ApiController extends Controller
             if (!$record instanceof DataObject) {
                 return $this->error(404, 'Not found');
             }
-            return $this->json($resources->serialize($name, $record, $this->fileBase()));
+            return $resources->serialize($name, $record, $this->fileBase());
         }
         if (empty($definition['list'])) {
             return $this->error(404, 'Not found');
@@ -90,17 +98,23 @@ class ApiController extends Controller
         foreach ($list->limit($limit, $offset) as $record) {
             $items[] = $resources->serialize($name, $record, $this->fileBase());
         }
-        return $this->json(['total' => $total, 'limit' => $limit, 'offset' => $offset, 'items' => $items]);
+        return ['total' => $total, 'limit' => $limit, 'offset' => $offset, 'items' => $items];
     }
 
     public function file(HTTPRequest $request): HTTPResponse
     {
-        $denied = $this->checkToken($request);
-        if ($denied) {
-            return $denied;
-        }
-        $resources = ApiResources::singleton();
         $name = (string) $request->param('Resource');
+        return ApiRuntime::singleton()->run(
+            $request,
+            'resources:' . $name . ':file',
+            'resources:' . $name,
+            fn () => $this->fileResponse($request, $name)
+        );
+    }
+
+    private function fileResponse(HTTPRequest $request, string $name): HTTPResponse
+    {
+        $resources = ApiResources::singleton();
         $definition = $resources->definition($name);
         $record = $definition ? $resources->baseList($definition)->byID((int) $request->param('ID')) : null;
         $file = $record instanceof DataObject
@@ -118,58 +132,13 @@ class ApiController extends Controller
         return $response;
     }
 
-    /**
-     * Null when the token is valid, otherwise the error response.
-     */
-    private function checkToken(HTTPRequest $request): ?HTTPResponse
-    {
-        $tokens = [];
-        foreach ((array) static::config()->get('token_env') as $env) {
-            $value = (string) Environment::getEnv((string) $env);
-            if ($value !== '') {
-                $tokens[] = $value;
-            }
-        }
-        if (!$tokens) {
-            return $this->error(404, 'Not found');
-        }
-        $given = (string) $request->getHeader('X-Api-Token');
-        $authorization = (string) $request->getHeader('Authorization');
-        if ($given === '' && str_starts_with($authorization, 'Bearer ')) {
-            $given = trim(substr($authorization, 7));
-        }
-        foreach ($tokens as $token) {
-            if ($given !== '' && hash_equals($token, $given)) {
-                return null;
-            }
-        }
-        Injector::inst()->get(LoggerInterface::class)->warning(
-            'Flow API: request without valid token from ' . $request->getIP()
-        );
-        return $this->error(401, 'Invalid token');
-    }
-
     private function fileBase(): string
     {
         return Director::absoluteURL('flow-api/file');
     }
 
-    /**
-     * @param array<mixed> $data
-     */
-    private function json(array $data): HTTPResponse
-    {
-        $response = HTTPResponse::create((string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        $response->addHeader('Content-Type', 'application/json; charset=utf-8');
-        $response->addHeader('Cache-Control', 'private, no-store');
-        $response->addHeader('X-Robots-Tag', 'noindex');
-        return $response;
-    }
-
     private function error(int $status, string $message): HTTPResponse
     {
-        $response = $this->json(['error' => $message]);
-        $response->setStatusCode($status);
-        return $response;
+        return ApiRuntime::singleton()->error($status, $message);
     }
 }
