@@ -25,10 +25,12 @@ use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Core\Manifest\ModuleLoader;
 use SilverStripe\Dev\FunctionalTest;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\Security\SecurityToken;
 use SilverStripe\Versioned\Versioned;
+use SilverStripe\View\SSViewer;
 
 class IntakeTest extends FunctionalTest
 {
@@ -52,6 +54,9 @@ class IntakeTest extends FunctionalTest
         Injector::inst()->registerService(new NullLogger(), LoggerInterface::class);
         Injector::inst()->registerService(new FakePdfRenderer(), PdfRenderer::class);
         Config::modify()->merge(Director::class, 'rules', ['intake//$Action/$ID/$OtherID' => IntakeController::class]);
+        // A page template around the frontdesk layouts (the module itself has none)
+        $theme = rtrim(ModuleLoader::getModule('atwx/silverstripe-flow')?->getRelativePath() ?? '', '/');
+        SSViewer::set_themes(['/' . ltrim($theme . '/tests/theme', '/'), SSViewer::DEFAULT_THEME]);
         Config::modify()->set(IntakeService::class, 'types', [
             'registration' => [
                 'title' => 'Anmeldung',
