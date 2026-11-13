@@ -461,6 +461,115 @@ class IntakeService
         return $list;
     }
 
+    /**
+     * Submissions of one form type as CSV (semicolons, UTF-8 with BOM, for
+     * Excel): reference, received, status, one column per field (groups as
+     * "Group: Field", repeats numbered "Parent 1: Name" up to the most entries
+     * among the submissions) and the file names. Values that a spreadsheet
+     * would read as a formula are prefixed with an apostrophe.
+     *
+     * @param iterable<Submission> $submissions
+     */
+    public function csv(IntakeType $type, iterable $submissions): string
+    {
+        $list = [];
+        foreach ($submissions as $submission) {
+            $list[] = $submission;
+        }
+        $columns = $this->csvColumns($type->fields(), array_map(fn (Submission $s) => $s->values(), $list), '');
+        $out = fopen('php://temp', 'r+');
+        if ($out === false) {
+            return '';
+        }
+        $header = [
+            _t(Submission::class . '.db_Reference', 'Reference'),
+            _t(Submission::class . '.db_Created', 'Received'),
+            _t(Submission::class . '.db_Status', 'Status'),
+        ];
+        foreach ($columns as [$label]) {
+            $header[] = $label;
+        }
+        $header[] = _t(IntakeController::class . '.FILES', 'Files');
+        fputcsv($out, $header, ';', '"', '');
+        foreach ($list as $submission) {
+            $values = $submission->values();
+            $row = [
+                (string) $submission->Reference,
+                date('d.m.Y H:i', (int) strtotime((string) $submission->Created)),
+                $submission->getStatusTitle(),
+            ];
+            foreach ($columns as [, $definition, $path]) {
+                $display = IntakeType::display($definition, $this->pathRaw($values, $path));
+                $row[] = $display === '–' ? '' : $display;
+            }
+            $row[] = implode(', ', $submission->Files()->column('OriginalName'));
+            fputcsv($out, array_map([$this, 'csvSafe'], $row), ';', '"', '');
+        }
+        rewind($out);
+        $csv = (string) stream_get_contents($out);
+        fclose($out);
+        return "\u{FEFF}" . $csv;
+    }
+
+    /**
+     * Flat CSV columns: [label, field definition, data path].
+     *
+     * @param array<string, array<string, mixed>> $fields
+     * @param array<int, array<string, mixed>> $rows Data of the submissions (to count repeats)
+     * @return array<int, array{0: string, 1: array<string, mixed>, 2: string}>
+     */
+    private function csvColumns(array $fields, array $rows, string $prefix, string $labelPrefix = ''): array
+    {
+        $columns = [];
+        foreach ($fields as $name => $definition) {
+            $title = $labelPrefix . (string) ($definition['title'] ?? $name);
+            $type = (string) ($definition['type'] ?? 'string');
+            $sub = IntakeType::normalizeFields((array) ($definition['fields'] ?? []));
+            if ($type === 'group') {
+                $inner = array_map(fn ($row) => is_array($row[$name] ?? null) ? $row[$name] : [], $rows);
+                array_push($columns, ...$this->csvColumns($sub, $inner, $prefix . $name . '.', $title . ': '));
+                continue;
+            }
+            if ($type === 'repeat') {
+                $count = 1;
+                foreach ($rows as $row) {
+                    $count = max($count, is_array($row[$name] ?? null) ? count($row[$name]) : 0);
+                }
+                for ($i = 0; $i < $count; $i++) {
+                    $inner = array_map(
+                        fn ($row) => is_array($row[$name][$i] ?? null) ? $row[$name][$i] : [],
+                        $rows
+                    );
+                    $path = $prefix . $name . '.' . $i . '.';
+                    array_push($columns, ...$this->csvColumns($sub, $inner, $path, $title . ' ' . ($i + 1) . ': '));
+                }
+                continue;
+            }
+            $columns[] = [$title, $definition, $prefix . $name];
+        }
+        return $columns;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function pathRaw(array $data, string $path): mixed
+    {
+        $value = $data;
+        foreach (explode('.', $path) as $key) {
+            if (!is_array($value) || !array_key_exists($key, $value)) {
+                return null;
+            }
+            $value = $value[$key];
+        }
+        return $value;
+    }
+
+    private function csvSafe(string $value): string
+    {
+        return $value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true) ? "'" . $value : $value;
+    }
+
     public function takeoverHandler(Submission $submission): ?TakeoverHandler
     {
         $class = $submission->intakeType()?->option('takeover');

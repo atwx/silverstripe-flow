@@ -55,6 +55,7 @@ class IntakeController extends FrontdeskController
 
     private static array $allowed_actions = [
         'download',
+        'csv',
     ];
 
     public function absoluteRecordLink(Submission $submission): string
@@ -192,6 +193,81 @@ class IntakeController extends FrontdeskController
                 });
         }
         return $actions;
+    }
+
+    /**
+     * "CSV" in the list, once a single form type is filtered.
+     *
+     * @return ArrayList<ArrayData>
+     */
+    // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- template method of the kit
+    public function Actions(): ArrayList
+    {
+        $actions = parent::Actions();
+        $type = IntakeService::singleton()->type((string) $this->getRequest()->getVar('Type'));
+        if ($type) {
+            $query = $this->CurrentQuery();
+            $actions->push(ArrayData::create([
+                'Title' => _t(self::class . '.CSV', 'CSV export'),
+                'Primary' => false,
+                'Link' => $this->Link('csv') . '?' . $query,
+                'Target' => '_blank',
+                'KeepQuery' => true,
+                'ExtraQuery' => '',
+            ]));
+        }
+        return $actions;
+    }
+
+    /**
+     * @return ArrayList<ArrayData>
+     */
+    protected function defineViewActions(DataObject $record): ArrayList
+    {
+        $actions = parent::defineViewActions($record);
+        $actions->push(ArrayData::create([
+            'Title' => _t(self::class . '.CSV', 'CSV export'),
+            'Link' => $this->Link('csv/' . $record->ID),
+            'Primary' => false,
+            'Active' => false,
+        ]));
+        return $actions;
+    }
+
+    /**
+     * csv/<ID>: one submission; csv?Type=<type>&…: the filtered list of a form
+     * type (columns from the type's fields).
+     */
+    public function csv(HTTPRequest $request): HTTPResponse
+    {
+        $service = IntakeService::singleton();
+        $id = (int) $request->param('ID');
+        if ($id) {
+            $submission = $this->findRecord($id);
+            $type = $submission instanceof Submission ? $submission->intakeType() : null;
+            if (!$submission instanceof Submission || !$type) {
+                return $this->httpError(404);
+            }
+            $submissions = [$submission];
+            $name = (string) $submission->Reference;
+        } else {
+            $type = $service->type((string) $request->getVar('Type'));
+            if (!$type) {
+                return $this->httpError(400, 'Choose a form type');
+            }
+            $submissions = [];
+            foreach ($this->getQuery()->filter('Type', $type->getName()) as $submission) {
+                if ($submission instanceof Submission && $submission->canView()) {
+                    $submissions[] = $submission;
+                }
+            }
+            $name = $type->getName() . '-' . date('Y-m-d');
+        }
+        $response = HTTPResponse::create($service->csv($type, $submissions));
+        $response->addHeader('Content-Type', 'text/csv; charset=utf-8');
+        $response->addHeader('Content-Disposition', 'attachment; filename="' . $name . '.csv"');
+        $response->addHeader('Cache-Control', 'private, no-store');
+        return $response;
     }
 
     /**

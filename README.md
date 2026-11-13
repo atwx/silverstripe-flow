@@ -889,6 +889,13 @@ Atwx\Flow\Intake\IntakeService:
   status and search; the record shows the data by the form type, the files
   (protected download) and what it was taken over into. *Edit* corrects the
   data in a form generated from the type.
+- **CSV export:** with one form type filtered, the list offers *CSV export*
+  (`intake/csv?Type=<type>&…`, the filtered list); a record offers it for
+  itself (`intake/csv/<ID>`). One column per field (groups as "Kind:
+  Vorname", repeats numbered up to the most entries: "Elternteil 1: Name",
+  "Elternteil 2: Name"), plus reference, date, status and file names.
+  Semicolons and UTF-8 with BOM for Excel; values that would start a formula
+  get an apostrophe.
 - **Takeover:** the type's handler implements `TakeoverHandler`:
 
   ```php
