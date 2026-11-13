@@ -5,11 +5,13 @@ namespace Atwx\Flow\Document;
 use Atwx\Flow\Extension\CaseFileExtension;
 use Atwx\Flow\Controller\FollowUpController;
 use Atwx\Flow\Model\CustomField;
+use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Model\Workflow;
 use Atwx\Flow\Model\Responsibility;
 use Atwx\Flow\Service\AssignmentService;
 use SilverStripe\Control\Director;
 use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBDatetime;
@@ -29,6 +31,15 @@ use SilverStripe\Security\Member;
  *   many_many relation of the case file; placeholders inside refer to that
  *   record (e.g. {{#Applications}}{{School.Name}}{{/Applications}})
  *
+ *   Options: sort=Field (sort=-Field descending, relation paths allowed),
+ *   filter=Field (only records where it is not empty) or filter=Field:value
+ *   (e.g. {{#Applications sort=Visit filter=Visit}}…{{/Applications}})
+ * - {{#Selected}} … {{/Selected}}: the entries chosen in the document dialog
+ * - {{Block.<Code>}}: a text block (TextBlock), inserted as HTML; it may
+ *   contain placeholders
+ * - {{FreeText}}: the free text of the document dialog (line breaks kept)
+ * - {{Signer.Name}}, {{Signer.Email}}: the member signing the document
+ *
  * - {{Item.Field}}, {{Item.Relation.Field}}: the sub-list entry of a mail per
  *   entry (MailTemplate.ForEach)
  * - {{Link}}: absolute URL of the case file's view (through the routed case
@@ -42,45 +53,124 @@ class Placeholders
 {
     use Injectable;
 
+    /**
+     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     *        inputs of the document dialog
+     */
     public function replace(
         string $text,
         DataObject $case,
         ?Member $me,
         bool $html = true,
-        ?DataObject $item = null
+        ?DataObject $item = null,
+        array $context = []
     ): string {
+        $text = $this->insertBlocks($text, $html);
         $text = (string) preg_replace_callback(
-            '/\{\{#([A-Za-z0-9_]+)\}\}(.*?)\{\{\/\1\}\}/s',
-            fn (array $match) => $this->repeat($match[1], $match[2], $case, $me, $html),
+            '/\{\{#([A-Za-z0-9_]+)((?:\s+[a-z]+=[^\s}]+)*)\s*\}\}(.*?)\{\{\/\1\}\}/s',
+            fn (array $match) => $this->repeat($match[1], $match[2], $match[3], $case, $me, $html, $context),
             $text
         );
-        return $this->fill($text, $case, $me, $html, $item);
+        return $this->fill($text, $case, $me, $html, $item, $context);
     }
 
     /**
-     * The block once per record of a to-many relation of the case file.
+     * Inserts text blocks (up to three levels of blocks within blocks).
      */
-    private function repeat(string $relation, string $block, DataObject $case, ?Member $me, bool $html): string
+    private function insertBlocks(string $text, bool $html): string
     {
-        $schema = DataObject::getSchema();
-        $isToMany = $schema->hasManyComponent($case::class, $relation)
-            || $schema->manyManyComponent($case::class, $relation);
-        if (!$isToMany) {
-            return '';
+        for ($level = 0; $level < 3 && str_contains($text, '{{Block.'); $level++) {
+            $text = (string) preg_replace_callback(
+                '/\{\{\s*Block\.([A-Za-z0-9_]+)\s*\}\}/',
+                function (array $match) use ($html) {
+                    $body = (string) TextBlock::byCode($match[1])?->Body;
+                    return $html ? $body : trim(html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5));
+                },
+                $text
+            );
+        }
+        return $text;
+    }
+
+    /**
+     * The block once per record of a to-many relation of the case file (or of
+     * the chosen entries), sorted and filtered by the options.
+     *
+     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     */
+    private function repeat(
+        string $relation,
+        string $options,
+        string $block,
+        DataObject $case,
+        ?Member $me,
+        bool $html,
+        array $context
+    ): string {
+        if ($relation === 'Selected') {
+            $list = $context['Selected'] ?? [];
+        } else {
+            $schema = DataObject::getSchema();
+            $isToMany = $schema->hasManyComponent($case::class, $relation)
+                || $schema->manyManyComponent($case::class, $relation);
+            if (!$isToMany) {
+                return '';
+            }
+            $list = $case->$relation();
+        }
+        preg_match_all('/([a-z]+)=([^\s}]+)/', $options, $pairs, PREG_SET_ORDER);
+        $sort = null;
+        $filter = null;
+        foreach ($pairs as [, $key, $value]) {
+            if ($key === 'sort') {
+                $sort = $value;
+            } elseif ($key === 'filter') {
+                $filter = $value;
+            }
+        }
+        if ($sort !== null && $list instanceof DataList) {
+            $descending = str_starts_with($sort, '-');
+            $list = $list->sort(ltrim($sort, '-'), $descending ? 'DESC' : 'ASC');
         }
         $result = '';
-        foreach ($case->$relation() as $item) {
-            $result .= $this->fill($block, $item, $me, $html);
+        foreach ($list as $record) {
+            if ($filter !== null && !$this->matches($record, $filter)) {
+                continue;
+            }
+            $result .= $this->fill($block, $record, $me, $html, null, $context);
         }
         return $result;
     }
 
-    private function fill(string $text, DataObject $case, ?Member $me, bool $html, ?DataObject $item = null): string
+    /**
+     * filter=Field: the value is not empty; filter=Field:value: it equals the value.
+     */
+    private function matches(DataObject $record, string $filter): bool
     {
+        [$path, $expected] = array_pad(explode(':', $filter, 2), 2, null);
+        $value = $this->resolve($record, explode('.', (string) $path));
+        return $expected === null ? trim($value) !== '' && $value !== '0' : $value === $expected;
+    }
+
+    /**
+     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     */
+    private function fill(
+        string $text,
+        DataObject $case,
+        ?Member $me,
+        bool $html,
+        ?DataObject $item = null,
+        array $context = []
+    ): string {
         return (string) preg_replace_callback(
             '/\{\{\s*([A-Za-z0-9_.]+)\s*(?:\|([^}|]*))?\}\}/',
-            function (array $match) use ($case, $me, $html, $item) {
-                $value = $this->value($match[1], $case, $me, $item);
+            function (array $match) use ($case, $me, $html, $item, $context) {
+                $raw = $html ? $this->htmlValue($match[1], $context) : null;
+                if ($raw !== null && trim(strip_tags($raw)) !== '') {
+                    return $raw;
+                }
+                $value = $raw !== null ? '' : $this->value($match[1], $case, $me, $item, $context);
                 if (trim($value) === '' && isset($match[2])) {
                     $value = trim($match[2]);
                 }
@@ -90,8 +180,30 @@ class Placeholders
         );
     }
 
-    public function value(string $path, DataObject $case, ?Member $me, ?DataObject $item = null): string
+    /**
+     * Values that go into HTML as HTML: the free text (escaped, line breaks
+     * kept). Null for all others.
+     *
+     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     */
+    private function htmlValue(string $path, array $context): ?string
     {
+        if ($path !== 'FreeText') {
+            return null;
+        }
+        return nl2br(htmlspecialchars((string) ($context['FreeText'] ?? ''), ENT_QUOTES | ENT_HTML5), false);
+    }
+
+    /**
+     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     */
+    public function value(
+        string $path,
+        DataObject $case,
+        ?Member $me,
+        ?DataObject $item = null,
+        array $context = []
+    ): string {
         $parts = explode('.', $path);
         $head = array_shift($parts);
         switch ($head) {
@@ -110,6 +222,11 @@ class Placeholders
                 return $status && $status->exists() ? (string) $status->getField('Title') : '';
             case 'Me':
                 return $me ? $this->resolve($me, $parts ?: ['Name']) : '';
+            case 'Signer':
+                $signer = $context['Signer'] ?? null;
+                return $signer ? $this->resolve($signer, $parts ?: ['Name']) : '';
+            case 'FreeText':
+                return $parts ? '' : (string) ($context['FreeText'] ?? '');
             case 'Flow':
                 return $this->customField($case, (string) ($parts[0] ?? ''));
             case 'Assignee':

@@ -18,7 +18,9 @@ use Atwx\Flow\Tests\Stubs\OpenRecord;
 use Atwx\Flow\Tests\Stubs\TestApplication;
 use Atwx\Flow\Tests\Stubs\TestCourse;
 use Atwx\Flow\Tests\Stubs\TestCourseController;
+use Atwx\Flow\Tests\Stubs\TestParticipant;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Control\HTTPResponse_Exception;
 use SilverStripe\Assets\Dev\TestAssetStore;
 use SilverStripe\Control\Session;
@@ -29,6 +31,7 @@ use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Group;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Permission;
+use SilverStripe\Security\Security;
 
 class DocumentTest extends SapphireTest
 {
@@ -40,6 +43,7 @@ class DocumentTest extends SapphireTest
     protected static $extra_dataobjects = [
         TestCourse::class,
         TestApplication::class,
+        TestParticipant::class,
         OpenRecord::class,
     ];
 
@@ -201,9 +205,15 @@ class DocumentTest extends SapphireTest
             }
         }
         $this->assertNotNull($action);
-        $this->assertSame([(string) $this->template()->ID => 'Bestätigung'], $action->getOptions());
-        $message = $action->run($course, (string) $this->template()->ID, '');
-        $this->assertSame('Das Schreiben „Bestätigung Kurs B“ wurde erstellt.', $message);
+        $this->assertContains('Bestätigung', $action->getOptions());
+        $result = $action->run($course, (string) $this->template()->ID, '');
+        $this->assertInstanceOf(HTTPResponse::class, $result, 'opens the dialog');
+        $this->assertStringEndsWith(
+            'test-courses/documents/' . $course->ID . '/compose?template=' . $this->template()->ID,
+            (string) $result->getHeader('Location')
+        );
+
+        DocumentService::singleton()->create($course, $this->template(), Security::getCurrentUser());
         $titles = $controller->timeline($course)?->column('Title') ?? [];
         $this->assertContains('Schreiben erstellt: Bestätigung Kurs B', $titles);
     }

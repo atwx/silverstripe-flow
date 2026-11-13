@@ -257,28 +257,69 @@ CMS (workflow → *Templates*) or in the configuration file:
       - code: travel_letter
         title: Reisebrief
         document_title: 'Reisebrief {{Child.FirstName}}'
-        body: '<p>Liebe Familie {{Child.Family.Surname}}, …</p>'
+        body: |
+          {{Block.Travel_Intro}}
+          <p>Liebe Familie {{Child.Family.Surname}}, …</p>
+          <ul>{{#Selected}}<li>{{School.Name}}: {{Visit}}</li>{{/Selected}}</ul>
+          <p>{{FreeText}}</p>
+          <p>{{Signer.Name}}</p>
+        select: Applications       # entries chosen in the dialog ({{#Selected}})
+        free_text: true            # field "Free text" in the dialog ({{FreeText}})
+        signer: consultant         # default signer: the member of this responsibility
 ```
 
-Placeholders: `{{Field}}`, `{{Relation.Field}}` (has_one chains, dates as
-dd.mm.yyyy, date and time as dd.mm.yyyy hh:mm, getters like `{{Child.Title}}`;
-no other methods), `{{Flow.<code>}}` (custom field), `{{Assignee.<code>}}`
-(responsibility), `{{Status}}`, `{{Today}}`, `{{Me.Name}}` and `{{Link}}` (the
-absolute address of the case file, through its routed controller). A default
-after a bar fills empty values: `{{Phone|-}}`. Values are HTML-escaped; unknown
-placeholders stay empty.
+**Placeholders:**
+- `{{Field}}`, `{{Relation.Field}}`: has_one chains. Dates come as dd.mm.yyyy,
+  date and time as dd.mm.yyyy hh:mm. Getters like `{{Child.Title}}` work; no
+  other methods are called.
+- `{{Flow.<code>}}` (custom field), `{{Assignee.<code>}}` (responsibility),
+  `{{Status}}`, `{{Today}}`, `{{Me.Name}}` and `{{Link}}` (the absolute address
+  of the case file, through its routed controller).
+- A default after a bar fills empty values: `{{Phone|-}}`.
+- Values are HTML-escaped; unknown placeholders stay empty.
 
-`FlowCaseController` adds the record action *Create document* (members who may
-edit and have a role in the workflow), the sub-list *Documents* with download
+**Loops:** `{{#Relation}}…{{/Relation}}` repeats the block for every record
+of a has_many or many_many relation; placeholders inside refer to that record.
+Options: `sort=Field` (`sort=-Field` descending, relation paths allowed),
+`filter=Field` (only records where the value is not empty) and
+`filter=Field:value`, e.g. `{{#Applications sort=Visit filter=Visit}}`.
+
+**Text blocks:** `{{Block.<Code>}}` inserts a text block (`TextBlock`) as
+HTML, the only placeholder that is not escaped. A block may contain
+placeholders and other blocks. Text blocks are maintained in the CMS (*Flow* →
+*Text blocks*) or in the frontdesk with `TextBlockController` (route it, e.g.
+`'text-blocks//$Action/$ID': Atwx\Flow\Controller\TextBlockController`,
+and grant its permissions). In mails (plain text) a block is inserted without
+its tags.
+
+**Dialog "Create document":** the record action *Create document* (members
+who may edit and have a role in the workflow) opens a form with:
+- the entries of the `select` relation (all chosen at first), as `{{#Selected}}`,
+- the free text (with `free_text`) as `{{FreeText}}`, line breaks kept,
+- the signer (`{{Signer.Name}}`, `{{Signer.Email}}`): candidates of the
+  workflow's responsibilities, preset with the member of `signer`, else the
+  current member,
+- *Preview* (the HTML in a new tab, scripts disabled) and *Create*.
+
+The sub-list *Documents* has download
 (`<segment>/documents/<ID>/download/<document>`, only for members who may view
-the case file) and an entry in the timeline. The PDF is stored protected
-(`DBFile`, not in the asset admin) and deleted with the case file.
+the case file), *Edit* (the dialog with the stored inputs; saving creates the
+PDF again from the current data) and *Delete*. The timeline lists created
+documents. The PDF is stored protected (`DBFile`, not in the asset admin) and
+deleted with the case file. Attaching a new PDF to a mail creates it with all
+entries and the default signer.
 
-The body is rendered into the template `Atwx\Flow\Document\FlowDocument` —
-override it in the project for the letterhead. PDFs are made by the
-`PdfRenderer` service, by default with `atwx/silverstripe-headless-pdf`
-(headless Chrome; the HTML is printed from a temporary file, nothing is served
-through a URL).
+**Letterhead:** the body is rendered into the template
+`Atwx\Flow\Document\FlowDocument` — override it in the project for the
+letterhead. It gets `$Title`, `$Body`, `$Case`, `$Template`, `$Date`,
+`$Signer`, `$FreeText` and `$Selected`. For more data, give the case class a
+method `flowDocumentData(DocumentTemplate $template, ?Member $signer): array`,
+or add an extension to `DocumentService` with
+`updateFlowDocumentData(array &$data, DataObject $case, DocumentTemplate $template)`.
+
+PDFs are made by the `PdfRenderer` service, by default with
+`atwx/silverstripe-headless-pdf` (headless Chrome; the HTML is printed from a
+temporary file, nothing is served through a URL).
 
 ## Comments, follow-ups and to-dos
 

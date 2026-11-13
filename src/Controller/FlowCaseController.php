@@ -379,6 +379,16 @@ abstract class FlowCaseController extends FrontdeskController
      * Whether the current member may write mails from the case file: a role in the
      * workflow (the edit permission is checked by the caller).
      */
+    /**
+     * Creating, editing and deleting documents: edit permission and a role in
+     * the workflow; the case file must be in this controller's list.
+     */
+    public function mayWriteDocuments(DataObject $case): bool
+    {
+        return $case->isInDB() && $this->canEdit() && $this->mayWriteMails($case)
+            && $this->getBaseList()->filter('ID', $case->ID)->exists();
+    }
+
     public function mayWriteMails(DataObject $case): bool
     {
         $actor = $this->flowActor();
@@ -545,19 +555,10 @@ abstract class FlowCaseController extends FrontdeskController
         }
         return RecordAction::create('flowdocument', _t(self::class . '.DOCUMENT', 'Create document'))
             ->options($options)
-            ->submitLabel(_t(self::class . '.DOCUMENT_CREATE', 'Create'))
-            ->handle(function (DataObject $record, ?string $option) {
-                $template = DocumentTemplate::get()->byID((int) $option);
-                if (!$template) {
-                    throw new ActionException(_t(self::class . '.DOCUMENT_UNKNOWN', 'Unknown template.'));
-                }
-                $document = DocumentService::singleton()->create($record, $template, Security::getCurrentUser());
-                return _t(
-                    self::class . '.DOCUMENT_CREATED',
-                    'Document "{title}" created.',
-                    ['title' => $document->Title]
-                );
-            });
+            ->submitLabel(_t(self::class . '.DOCUMENT_COMPOSE', 'Continue'))
+            ->handle(fn (DataObject $record, ?string $option) => $this->redirect(
+                $this->Link('documents/' . $record->ID . '/compose') . '?template=' . (int) $option
+            ));
     }
 
     /**
