@@ -543,3 +543,9 @@ de:
   Atwx\Flow\Intake\IntakeReceipt:
     RECEIVED: 'Nummer {reference}, eingegangen am {date}'
     FILES: 'Dateien'
+  Atwx\Flow\Numbering\NumberSequence:
+    SINGULARNAME: 'Nummernkreis'
+    PLURALNAME: 'Nummernkreise'
+    Code: 'Nummernkreis'
+    Period: 'Jahr'
+    LastNumber: 'Letzte Nummer'

@@ -6,6 +6,7 @@ use Atwx\Flow\Api\ApiClient;
 use Atwx\Flow\Api\ApiLog;
 use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Model\Workflow;
+use Atwx\Flow\Numbering\NumberSequence;
 use Atwx\Flow\Security\FlowPermissions;
 use SilverStripe\Admin\ModelAdmin;
 
@@ -25,6 +26,7 @@ class FlowAdmin extends ModelAdmin
         TextBlock::class,
         ApiClient::class,
         ApiLog::class,
+        NumberSequence::class,
     ];
 
     private static array $required_permission_codes = [

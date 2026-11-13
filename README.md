@@ -931,6 +931,46 @@ Atwx\Flow\Intake\IntakeService:
   Submission)`, `onAfterTakeOver(Submission, Member)`,
   `updateReceiptData(ArrayData, Submission)` on `IntakeService`.
 
+## Number sequences
+
+Running numbers for invoices, file numbers or letters, without duplicates
+also when two people create a record at the same time (a database lock per
+sequence). A number is drawn once and never changes.
+
+```yaml
+App\Models\Invoice:
+  extensions:
+    - Atwx\Flow\Numbering\NumberingExtension
+  flow_numbering:
+    sequence: 'invoice'          # code of the sequence (default: table name)
+    field: 'Number'              # Int field of the running number (default Number)
+    year_field: 'NumberYear'     # optional Int field: the count restarts every year
+    date_field: 'InvoiceDate'    # optional: the year comes from this date (default: today)
+    reference_field: 'Reference' # optional Varchar field for the formatted number
+    format: 'RE-{year}-{number:4}'   # {year}, {yy}, {number}, {number:N}
+    assign: 'write'              # 'write': on the first write; 'manual': $record->assignNumber()
+  fdk_hidden_fields: [Number, NumberYear, Reference]
+```
+
+The project defines the fields (add a unique index on number and year).
+`$record->getFormattedNumber()` (`$FormattedNumber` in templates) returns the
+formatted number. With `assign: 'manual'` the number is drawn when the code
+calls `assignNumber()`, e.g. when an invoice is released, so drafts do not use
+up numbers.
+
+A sequence starts after the highest number already in use, so existing records
+keep their numbers. Admins see the sequences in the CMS (Abläufe → Number
+sequences) and can set the last number, e.g. to continue an old system. In code:
+
+```php
+NumberSequences::singleton()->next('invoice', '2026');   // draws the next number
+NumberSequences::singleton()->peek('invoice', '2026');   // shows it without drawing
+NumberSequences::singleton()->setLast('invoice', '2026', 1200);
+```
+
+A number is lost (a gap) only when the write after drawing it fails. The inbox
+numbers its submissions with these sequences too (`intake-<type>`).
+
 ## Extension points
 
 | Hook | Where | Use |
