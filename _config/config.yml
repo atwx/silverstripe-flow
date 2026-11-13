@@ -20,6 +20,8 @@ SilverStripe\Cli\Sake:
     'flow:export-config': Atwx\Flow\Cli\ExportConfigCommand
     'flow:cleanup-data': Atwx\Flow\Cli\CleanupDataCommand
     'flow:followup-digest': Atwx\Flow\Cli\FollowUpDigestCommand
+    'flow:api-client': Atwx\Flow\Cli\ApiClientCommand
+    'flow:retention': Atwx\Flow\Cli\RetentionCommand
 
 SilverStripe\Security\Member:
   extensions:
@@ -36,3 +38,4 @@ SilverStripe\Control\Director:
     'flow/link': Atwx\Flow\Controller\AccessLinkController
     'flow/download': Atwx\Flow\Controller\MailDownloadController
     'flow-api': Atwx\Flow\Api\ApiController
+    'api': Atwx\Flow\Api\ApiGateway
