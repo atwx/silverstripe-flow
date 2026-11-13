@@ -6,6 +6,7 @@ use Atwx\Flow\Api\ApiClient;
 use Atwx\Flow\Api\ApiException;
 use Atwx\Flow\Document\PdfRenderer;
 use Atwx\Flow\Model\TextBlock;
+use Atwx\Flow\Numbering\NumberSequences;
 use Psr\Log\LoggerInterface;
 use SilverStripe\Assets\File;
 use SilverStripe\Control\Director;
@@ -228,10 +229,14 @@ class IntakeService
     private function assignReference(Submission $submission, IntakeType $type): void
     {
         $year = (int) DBDatetime::now()->Format('y');
+        $filter = ['Type' => $type->getName(), 'Year' => $year];
         for ($attempt = 0; $attempt < 5; $attempt++) {
-            $last = (int) Submission::get()->filter(['Type' => $type->getName(), 'Year' => $year])->max('Number');
             $submission->Year = $year;
-            $submission->Number = $last + 1 + $attempt;
+            $submission->Number = NumberSequences::singleton()->next(
+                'intake-' . $type->getName(),
+                (string) $year,
+                fn () => (int) Submission::get()->filter($filter)->max('Number')
+            );
             $submission->Reference = sprintf('%s-%d-%04d', $type->referencePrefix(), $year, $submission->Number);
             if (!Submission::get()->filter('Reference', $submission->Reference)->exists()) {
                 $submission->write();
