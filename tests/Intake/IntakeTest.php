@@ -55,7 +55,7 @@ class IntakeTest extends FunctionalTest
         Injector::inst()->registerService(new FakePdfRenderer(), PdfRenderer::class);
         Config::modify()->merge(Director::class, 'rules', ['intake//$Action/$ID/$OtherID' => IntakeController::class]);
         // A page template around the frontdesk layouts (the module itself has none)
-        $theme = rtrim(ModuleLoader::getModule('atwx/silverstripe-flow')?->getRelativePath() ?? '', '/');
+        $theme = rtrim((string) ModuleLoader::getModule('atwx/silverstripe-flow')->getRelativePath(), '/');
         SSViewer::set_themes(['/' . ltrim($theme . '/tests/theme', '/'), SSViewer::DEFAULT_THEME]);
         Config::modify()->set(IntakeService::class, 'types', [
             'registration' => [
