@@ -21,6 +21,7 @@ use SilverStripe\Security\Security;
  * @property int $MemberID
  * @property ?string $FreeText
  * @property ?string $SelectedIDs
+ * @property ?string $BlockIDs
  * @property int $SignerID
  * @property DBFile $File
  * @method DataObject Case()
@@ -37,6 +38,7 @@ class CaseDocument extends DataObject
         'File' => 'DBFile',
         'FreeText' => 'Text',
         'SelectedIDs' => 'Text',
+        'BlockIDs' => 'Text',
     ];
 
     private static array $has_one = [
@@ -112,6 +114,17 @@ class CaseDocument extends DataObject
     public function selectedIDs(): array
     {
         $ids = json_decode((string) $this->SelectedIDs, true);
+        return is_array($ids) ? array_values(array_map('intval', $ids)) : [];
+    }
+
+    /**
+     * IDs of the chosen text blocks.
+     *
+     * @return array<int, int>
+     */
+    public function blockIDs(): array
+    {
+        $ids = json_decode((string) $this->BlockIDs, true);
         return is_array($ids) ? array_values(array_map('intval', $ids)) : [];
     }
 

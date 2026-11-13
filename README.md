@@ -268,6 +268,7 @@ CMS (workflow → *Templates*) or in the configuration file:
         select: Applications       # entries chosen in the dialog ({{#Selected}})
         free_text: true            # field "Free text" in the dialog ({{FreeText}})
         signer: consultant         # default signer: the member of this responsibility
+        blocks: Tests              # text blocks of this category to choose (true = all)
 ```
 
 **Placeholders:**
@@ -301,6 +302,10 @@ who may edit and have a role in the workflow) opens a form with:
 - the signer (`{{Signer.Name}}`, `{{Signer.Email}}`): candidates of the
   workflow's responsibilities, preset with the member of `signer`, else the
   current member,
+- the text blocks of the `blocks` category (`true`: all) to choose, as
+  `{{#SelectedBlocks}}<h2>{{Title}}</h2>{{Body}}{{/SelectedBlocks}}`; `{{Body}}`
+  is the block as HTML with its placeholders filled for the case file. Text
+  blocks get a category in their form,
 - *Preview* (the HTML in a new tab, scripts disabled) and *Create*.
 
 The sub-list *Documents* has download

@@ -5,6 +5,7 @@ namespace Atwx\Flow\Model;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\TextareaField;
+use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
 
 /**
@@ -15,6 +16,7 @@ use SilverStripe\ORM\DataObject;
  * @property ?string $Code
  * @property ?string $Title
  * @property ?string $Body
+ * @property ?string $Category
  */
 class TextBlock extends DataObject
 {
@@ -24,6 +26,7 @@ class TextBlock extends DataObject
         'Code' => 'Varchar(64)',
         'Title' => 'Varchar(255)',
         'Body' => 'HTMLText',
+        'Category' => 'Varchar(100)',
     ];
 
     private static array $indexes = [
@@ -33,9 +36,21 @@ class TextBlock extends DataObject
     private static array $summary_fields = [
         'Title',
         'Code',
+        'Category',
     ];
 
     private static string $default_sort = 'Title ASC';
+
+    /**
+     * Blocks offered in the document dialog: all ('*') or those of a category.
+     *
+     * @return DataList<TextBlock>
+     */
+    public static function choosable(string $category): DataList
+    {
+        $list = DataList::create(TextBlock::class);
+        return $category === '*' ? $list : $list->filter('Category', $category);
+    }
 
     public static function byCode(string $code): ?self
     {
@@ -52,6 +67,7 @@ class TextBlock extends DataObject
         $labels['Code'] = _t(self::class . '.db_Code', 'Code');
         $labels['Title'] = _t(self::class . '.db_Title', 'Title');
         $labels['Body'] = _t(self::class . '.db_Body', 'Text');
+        $labels['Category'] = _t(self::class . '.db_Category', 'Category');
         return $labels;
     }
 
@@ -64,6 +80,10 @@ class TextBlock extends DataObject
                 self::class . '.BODY_DESCRIPTION',
                 'HTML; placeholders like in templates. Inserted with {{Block.<code>}}.'
             )));
+        $fields->dataFieldByName('Category')?->setDescription(_t(
+            self::class . '.CATEGORY_DESCRIPTION',
+            'Optional; templates offer the blocks of a category for choosing (e.g. Tests).'
+        ));
         $fields->dataFieldByName('Code')?->setDescription(_t(
             self::class . '.CODE_DESCRIPTION',
             'Letters, digits and underscores, e.g. Travel_Intro.'

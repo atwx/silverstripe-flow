@@ -17,7 +17,8 @@ use SilverStripe\ORM\DataObject;
  * ({{FreeText}}, with FreeText on), choose entries of a list of the case file
  * (Select = relation name; {{#Selected}}…{{/Selected}}) and the signing member
  * ({{Signer.Name}}; default: the member of SignerResponsibility, else the
- * current member).
+ * current member). With Blocks ('*' = all, else a category) text blocks are
+ * chosen in the dialog ({{#SelectedBlocks}}{{Title}} {{Body}}{{/SelectedBlocks}}).
  *
  * @property string $Code
  * @property string $Title
@@ -27,6 +28,7 @@ use SilverStripe\ORM\DataObject;
  * @property ?string $Select
  * @property bool $FreeText
  * @property ?string $SignerResponsibility
+ * @property ?string $Blocks
  * @property int $WorkflowID
  * @method Workflow Workflow()
  */
@@ -45,6 +47,7 @@ class DocumentTemplate extends DataObject
         'Select' => 'Varchar(100)',
         'FreeText' => 'Boolean',
         'SignerResponsibility' => 'Varchar(64)',
+        'Blocks' => 'Varchar(100)',
     ];
 
     private static array $has_one = [
@@ -75,7 +78,8 @@ class DocumentTemplate extends DataObject
                 'HTML with placeholders: {{Field}}, {{Relation.Field}}, {{Flow.<custom field>}}, '
                 . '{{Assignee.<responsibility>}}, {{Status}}, {{Today}}, {{Me.Name}}, {{Signer.Name}}, '
                 . '{{FreeText}}, {{Block.<code>}}, {{#Relation sort=Field filter=Field}}…{{/Relation}}, '
-                . '{{#Selected}}…{{/Selected}}.'
+                . '{{#Selected}}…{{/Selected}}, '
+                . '{{#SelectedBlocks}}{{Title}} {{Body}}{{/SelectedBlocks}}.'
             )));
         $fields->dataFieldByName('DocumentTitle')?->setDescription(_t(
             self::class . '.DOCUMENT_TITLE_DESCRIPTION',
@@ -91,6 +95,15 @@ class DocumentTemplate extends DataObject
     {
         $relation = trim((string) $this->Select);
         return $relation !== '' ? $relation : null;
+    }
+
+    /**
+     * '*' (all text blocks), a category, or null (no choice of text blocks).
+     */
+    public function blockChoice(): ?string
+    {
+        $blocks = trim((string) $this->Blocks);
+        return $blocks !== '' ? $blocks : null;
     }
 
     /**

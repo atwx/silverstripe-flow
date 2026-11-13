@@ -35,6 +35,9 @@ use SilverStripe\Security\Member;
  *   filter=Field (only records where it is not empty) or filter=Field:value
  *   (e.g. {{#Applications sort=Visit filter=Visit}}…{{/Applications}})
  * - {{#Selected}} … {{/Selected}}: the entries chosen in the document dialog
+ * - {{#SelectedBlocks}}{{Title}} {{Body}}{{/SelectedBlocks}}: the text blocks
+ *   chosen in the document dialog; {{Body}} is the block as HTML with its
+ *   placeholders filled for the case file
  * - {{Block.<Code>}}: a text block (TextBlock), inserted as HTML; it may
  *   contain placeholders
  * - {{FreeText}}: the free text of the document dialog (line breaks kept)
@@ -48,13 +51,20 @@ use SilverStripe\Security\Member;
  *
  * Date-and-time fields are formatted dd.mm.yyyy hh:mm.
  * Unknown placeholders become empty. Values are HTML-escaped unless $html is false.
+ *
+ * @phpstan-type DocumentContext array{
+ *     FreeText?: string,
+ *     Selected?: iterable<DataObject>,
+ *     Signer?: ?Member,
+ *     SelectedBlocks?: iterable<TextBlock>
+ * }
  */
 class Placeholders
 {
     use Injectable;
 
     /**
-     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     * @param DocumentContext $context
      *        inputs of the document dialog
      */
     public function replace(
@@ -96,7 +106,7 @@ class Placeholders
      * The block once per record of a to-many relation of the case file (or of
      * the chosen entries), sorted and filtered by the options.
      *
-     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     * @param DocumentContext $context
      */
     private function repeat(
         string $relation,
@@ -107,6 +117,9 @@ class Placeholders
         bool $html,
         array $context
     ): string {
+        if ($relation === 'SelectedBlocks') {
+            return $this->repeatBlocks($block, $case, $me, $html, $context);
+        }
         if ($relation === 'Selected') {
             $list = $context['Selected'] ?? [];
         } else {
@@ -143,6 +156,31 @@ class Placeholders
     }
 
     /**
+     * The block once per chosen text block: {{Body}} is its text (HTML, its
+     * placeholders filled for the case file), other placeholders refer to the
+     * text block (e.g. {{Title}}).
+     *
+     * @param DocumentContext $context
+     */
+    private function repeatBlocks(string $block, DataObject $case, ?Member $me, bool $html, array $context): string
+    {
+        $marker = "\u{E000}body\u{E000}";
+        $template = (string) preg_replace('/\{\{\s*Body\s*\}\}/', $marker, $block);
+        $result = '';
+        foreach ($context['SelectedBlocks'] ?? [] as $textBlock) {
+            // Without the chosen blocks: a block cannot repeat them inside itself.
+            $inner = $context;
+            unset($inner['SelectedBlocks']);
+            $body = $this->replace((string) $textBlock->Body, $case, $me, true, null, $inner);
+            if (!$html) {
+                $body = trim(html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5));
+            }
+            $result .= str_replace($marker, $body, $this->fill($template, $textBlock, $me, $html, null, $context));
+        }
+        return $result;
+    }
+
+    /**
      * filter=Field: the value is not empty; filter=Field:value: it equals the value.
      */
     private function matches(DataObject $record, string $filter): bool
@@ -153,7 +191,7 @@ class Placeholders
     }
 
     /**
-     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     * @param DocumentContext $context
      */
     private function fill(
         string $text,
@@ -184,7 +222,7 @@ class Placeholders
      * Values that go into HTML as HTML: the free text (escaped, line breaks
      * kept). Null for all others.
      *
-     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     * @param DocumentContext $context
      */
     private function htmlValue(string $path, array $context): ?string
     {
@@ -195,7 +233,7 @@ class Placeholders
     }
 
     /**
-     * @param array{FreeText?: string, Selected?: iterable<DataObject>, Signer?: ?Member} $context
+     * @param DocumentContext $context
      */
     public function value(
         string $path,

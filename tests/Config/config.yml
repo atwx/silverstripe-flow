@@ -99,10 +99,11 @@ workflows:
         body: '<p>Der Kurs {{Title}} in {{Venue}} hat den Status {{Status}}.</p>'
       - code: letter
         title: Brief
-        body: '{{Block.Intro}}<ul>{{#Selected}}<li>{{Name}}</li>{{/Selected}}</ul><ol>{{#Participants sort=-Name filter=Email}}<li>{{Name}}</li>{{/Participants}}</ol><p>{{FreeText}}</p><p>{{Signer.Name}}</p>'
+        body: '{{Block.Intro}}<ul>{{#Selected}}<li>{{Name}}</li>{{/Selected}}</ul><ol>{{#Participants sort=-Name filter=Email}}<li>{{Name}}</li>{{/Participants}}</ol>{{#SelectedBlocks}}<h2>{{Title}}</h2>{{Body}}{{/SelectedBlocks}}<p>{{FreeText}}</p><p>{{Signer.Name}}</p>'
         select: Participants
         free_text: true
         signer: lead
+        blocks: Tests
     follow_ups:
       - code: chase_speaker
         title: 'Referent:in nachfassen'
