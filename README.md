@@ -314,7 +314,9 @@ placeholders and other blocks. Text blocks are maintained in the CMS (*Flow* →
 *Text blocks*) or in the frontdesk with `TextBlockController` (route it, e.g.
 `'text-blocks//$Action/$ID': Atwx\Flow\Controller\TextBlockController`,
 and grant its permissions). In mails (plain text) a block is inserted without
-its tags.
+its tags. A block shows where it is used (document and mail templates, other
+blocks, inbox form types; `TextBlock::usages()`, hook `updateUsages`). While it
+is used, its code cannot be changed and it cannot be deleted.
 
 **Dialog "Create document":** the record action *Create document* (members
 who may edit and have a role in the workflow) opens a form with:

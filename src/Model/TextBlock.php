@@ -2,8 +2,11 @@
 
 namespace Atwx\Flow\Model;
 
+use Atwx\Flow\Intake\IntakeService;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Forms\FieldList;
+use SilverStripe\Forms\LiteralField;
+use SilverStripe\Forms\ReadonlyField;
 use SilverStripe\Forms\TextareaField;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataObject;
@@ -52,6 +55,55 @@ class TextBlock extends DataObject
         return $category === '*' ? $list : $list->filter('Category', $category);
     }
 
+    /**
+     * Where the block is used: document and mail templates, other text blocks
+     * ({{Block.<code>}}) and inbox form types (notify.block, receipt.block).
+     * Hook updateUsages(array &$usages).
+     *
+     * @return array<int, string> Titles, e.g. "Schreiben: Einladung (Veranstaltung)"
+     */
+    public function usages(?string $code = null): array
+    {
+        $code ??= (string) $this->Code;
+        if ($code === '') {
+            return [];
+        }
+        $patterns = ['{{Block.' . $code . '}}', '{{Block.' . $code . '|'];
+        $usages = [];
+        $sources = [
+            [DocumentTemplate::class, ['Body'], _t(self::class . '.USED_DOCUMENT', 'Document')],
+            [MailTemplate::class, ['Subject', 'Body'], _t(self::class . '.USED_MAIL', 'Mail')],
+        ];
+        foreach ($sources as [$class, $fields, $kind]) {
+            $any = [];
+            foreach ($fields as $field) {
+                $any[$field . ':PartialMatch:case'] = $patterns;
+            }
+            foreach (DataList::create($class)->filterAny($any) as $template) {
+                $workflow = $template->getComponent('Workflow');
+                $usages[] = $kind . ': ' . $template->Title
+                    . ($workflow->exists() ? ' (' . $workflow->Title . ')' : '');
+            }
+        }
+        $blocks = DataList::create(self::class)
+            ->filterAny(['Body:PartialMatch:case' => $patterns])
+            ->exclude('ID', (int) $this->ID);
+        foreach ($blocks as $block) {
+            $usages[] = _t(self::class . '.USED_BLOCK', 'Text block') . ': ' . $block->Title;
+        }
+        foreach (IntakeService::singleton()->types() as $type) {
+            foreach (['notify', 'receipt'] as $option) {
+                $config = $type->option($option);
+                if (is_array($config) && (string) ($config['block'] ?? '') === $code) {
+                    $usages[] = _t(self::class . '.USED_INTAKE', 'Form') . ': '
+                        . $type->getTitle() . ' (' . $option . ')';
+                }
+            }
+        }
+        $this->extend('updateUsages', $usages);
+        return $usages;
+    }
+
     public static function byCode(string $code): ?self
     {
         return $code === '' ? null : self::get()->find('Code', $code);
@@ -88,6 +140,17 @@ class TextBlock extends DataObject
             self::class . '.CODE_DESCRIPTION',
             'Letters, digits and underscores, e.g. Travel_Intro.'
         ));
+        $usages = $this->isInDB() ? $this->usages() : [];
+        if ($usages !== []) {
+            $fields->replaceField('Code', ReadonlyField::create('Code', $this->fieldLabel('Code'))->setDescription(
+                _t(self::class . '.CODE_LOCKED', 'The code cannot be changed while the block is used.')
+            ));
+            $fields->addFieldToTab('Root.Main', LiteralField::create('Usages', sprintf(
+                '<p><strong>%s</strong></p><ul><li>%s</li></ul>',
+                htmlspecialchars(_t(self::class . '.USED_IN', 'Used in')),
+                implode('</li><li>', array_map('htmlspecialchars', $usages))
+            )));
+        }
         return $fields;
     }
 
@@ -103,9 +166,27 @@ class TextBlock extends DataObject
         } elseif (self::get()->filter('Code', $code)->exclude('ID', (int) $this->ID)->exists()) {
             $result->addFieldError('Code', _t(self::class . '.CODE_TAKEN', 'This code is already in use.'));
         }
+        $before = $this->isInDB() && $this->isChanged('Code')
+            ? (string) ($this->getChangedFields(['Code'])['Code']['before'] ?? '')
+            : '';
+        if ($before !== '' && $before !== $code && $this->usages($before) !== []) {
+            $result->addFieldError('Code', _t(
+                self::class . '.CODE_IN_USE',
+                'The code cannot be changed while the block is used: {usages}',
+                ['usages' => implode(', ', $this->usages($before))]
+            ));
+        }
         if (!$this->Title) {
             $result->addFieldError('Title', _t(ConfigRecord::class . '.TITLE_REQUIRED', 'Please enter a title.'));
         }
         return $result;
+    }
+
+    /**
+     * A block that is still used cannot be deleted.
+     */
+    public function canDelete($member = null): bool
+    {
+        return parent::canDelete($member) && $this->usages() === [];
     }
 }

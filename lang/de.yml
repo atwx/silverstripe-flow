@@ -291,6 +291,7 @@ de:
     SAVED: 'Das Schreiben „{title}“ wurde neu erzeugt.'
   Atwx\Flow\Controller\TextBlockController:
     SEARCH: 'Suche'
+    UNUSED: 'nirgends'
   Atwx\Flow\Model\TextBlock:
     SINGULARNAME: 'Textbaustein'
     PLURALNAME: 'Textbausteine'
@@ -298,6 +299,14 @@ de:
     db_Title: 'Bezeichnung'
     db_Body: 'Text'
     db_Category: 'Kategorie'
+    USED_IN: 'Verwendet in'
+    USED_DOCUMENT: 'Schreiben'
+    USED_MAIL: 'Mail'
+    USED_BLOCK: 'Textbaustein'
+    USED_INTAKE: 'Formular'
+    CODE_LOCKED: 'Das Kürzel kann nicht geändert werden, solange der Baustein verwendet wird.'
+    CODE_IN_USE: 'Das Kürzel kann nicht geändert werden, der Baustein wird verwendet: {usages}'
+    IN_USE: 'Der Textbaustein wird noch verwendet.'
     CATEGORY_DESCRIPTION: 'Optional; Vorlagen bieten die Bausteine einer Kategorie zur Auswahl an (z. B. Tests).'
     BODY_DESCRIPTION: 'HTML; Platzhalter wie in Vorlagen. Eingesetzt mit {{Block.<Kürzel>}}.'
     CODE_DESCRIPTION: 'Buchstaben, Ziffern und Unterstriche, z. B. Reisebrief_Intro.'
