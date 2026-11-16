@@ -7,6 +7,7 @@ use Atwx\Flow\Model\DocumentTemplate;
 use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Service\DocumentService;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskSubController;
+use Atwx\SilverstripeFrontdeskKit\Forms\CheckboxSetSelectAll;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\RowAction;
 use SilverStripe\Control\HTTPRequest;
@@ -170,7 +171,9 @@ class CaseDocumentSubController extends FrontdeskSubController
             foreach ($service->selectable($case, $template) as $entry) {
                 $entries[(int) $entry->ID] = (string) $entry->getTitle();
             }
-            $field = CheckboxSetField::create('Entries', _t(self::class . '.ENTRIES', 'Entries'), $entries);
+            $field = CheckboxSetSelectAll::apply(
+                CheckboxSetField::create('Entries', _t(self::class . '.ENTRIES', 'Entries'), $entries)
+            );
             if (!$entries) {
                 $field->setDescription(_t(self::class . '.NO_ENTRIES', 'The list is empty.'));
             }
@@ -179,7 +182,9 @@ class CaseDocumentSubController extends FrontdeskSubController
         $choice = $template?->blockChoice();
         if ($choice !== null) {
             $blocks = TextBlock::choosable($choice)->map('ID', 'Title')->toArray();
-            $field = CheckboxSetField::create('BlockIDs', _t(self::class . '.BLOCKS', 'Text blocks'), $blocks);
+            $field = CheckboxSetSelectAll::apply(
+                CheckboxSetField::create('BlockIDs', _t(self::class . '.BLOCKS', 'Text blocks'), $blocks)
+            );
             if (!$blocks) {
                 $field->setDescription(_t(self::class . '.NO_BLOCKS', 'There are no text blocks to choose.'));
             }

@@ -348,6 +348,9 @@ who may edit and have a role in the workflow) opens a form with:
   blocks get a category in their form,
 - *Preview* (the HTML in a new tab, scripts disabled) and *Create*.
 
+Entries and text blocks get "Alle auswählen" / "Keine" from 3 options on (kit
+`CheckboxSetSelectAll`), as do the entries of a mail per entry (`for_each`).
+
 The sub-list *Documents* has download
 (`<segment>/documents/<ID>/download/<document>`, only for members who may view
 the case file), *Edit* (the dialog with the stored inputs; saving creates the

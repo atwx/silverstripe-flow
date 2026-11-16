@@ -31,6 +31,7 @@ use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\SapphireTest;
+use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\i18n\i18n;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Group;
@@ -301,8 +302,10 @@ class MailTest extends SapphireTest
             (new HTTPRequest('GET', 'x', ['template' => $template->ID]))->setSession(new Session([]))
         )->mailForm();
         $entries = $form->Fields()->dataFieldByName('Entries');
-        $this->assertNotNull($entries);
+        $this->assertInstanceOf(CheckboxSetField::class, $entries);
         $this->assertSame([(int) $ruth->ID, (int) $felix->ID], array_map('intval', (array) $entries->getValue()));
+        $this->assertCount(3, $entries->getSource(), 'with the entry without an address');
+        $this->assertNotNull($entries->getAttribute('data-fdk-select-all'), '"select all" from 3 options on');
         $this->assertNull($form->Actions()->fieldByName('action_doEml'), 'no mail file for mails per entry');
 
         $data = [

@@ -10,6 +10,7 @@ use Atwx\Flow\Model\MailTemplate;
 use Atwx\Flow\Service\MailDraft;
 use Atwx\Flow\Service\MailService;
 use Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskSubController;
+use Atwx\SilverstripeFrontdeskKit\Forms\CheckboxSetSelectAll;
 use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\RowAction;
 use SilverStripe\Control\HTTPRequest;
@@ -244,8 +245,10 @@ class CaseMailSubController extends FrontdeskSubController
                 $disabled[] = (int) $item->ID;
             }
         }
-        $field = CheckboxSetField::create('Entries', _t(self::class . '.ENTRIES', 'One mail each to'), $options)
-            ->setDisabledItems($disabled);
+        $field = CheckboxSetSelectAll::apply(
+            CheckboxSetField::create('Entries', _t(self::class . '.ENTRIES', 'One mail each to'), $options)
+                ->setDisabledItems($disabled)
+        );
         if (!$options) {
             $field->setDescription(_t(self::class . '.NO_ENTRIES', 'The list is empty.'));
         }

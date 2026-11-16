@@ -180,6 +180,7 @@ class LetterTest extends SapphireTest
         $field = $form->Fields()->dataFieldByName('BlockIDs');
         $this->assertInstanceOf(CheckboxSetField::class, $field);
         $this->assertEqualsCanonicalizing(['Lesen', 'Rechnen'], array_values($field->getSource()));
+        $this->assertNull($field->getAttribute('data-fdk-select-all'), 'no "select all" below 3 options');
 
         $document = DocumentService::singleton()->create($this->course, $this->letter(), $this->olga, [
             'BlockIDs' => [$this->blockID('Rechnen')],
@@ -200,6 +201,10 @@ class LetterTest extends SapphireTest
             [$this->participantID('Anna'), $this->participantID('Ben'), $this->participantID('Cem')],
             array_map('intval', (array) $fields->dataFieldByName('Entries')?->getValue()),
             'all entries chosen'
+        );
+        $this->assertNotNull(
+            $fields->dataFieldByName('Entries')?->getAttribute('data-fdk-select-all'),
+            '"select all" from 3 options on'
         );
         $this->assertSame((int) $this->lena->ID, (int) $fields->dataFieldByName('SignerID')?->getValue());
         $this->assertNotNull($fields->dataFieldByName('FreeText'));
