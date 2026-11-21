@@ -25,6 +25,10 @@
                     "atwx/silverstripe-frontdesk-kit": "dev-main"
                 }
             }
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/atwx/silverstripe-mpdf.git"
         }
     ],
     "require": {
@@ -39,7 +43,8 @@
         "cambis/silverstan": "^2",
         "phpstan/extension-installer": "^1.4",
         "squizlabs/php_codesniffer": "^3.7",
-        "silverstripe/asset-admin": "^3"
+        "silverstripe/asset-admin": "^3",
+        "atwx/silverstripe-mpdf": "^1.0.1"
     },
     "autoload": {
         "psr-4": {
@@ -71,7 +76,8 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "suggest": {
-        "atwx/silverstripe-headless-pdf": "PDF documents from templates (default PdfRenderer)",
+        "atwx/silverstripe-mpdf": "PDF documents and receipts (default PdfRenderer, MpdfPdfRenderer)",
+        "atwx/silverstripe-headless-pdf": "Alternative PdfRenderer with headless Chrome (HeadlessPdfRenderer)",
         "silverstripe/asset-admin": "Upload field for the files of mail templates in the CMS"
     }
 }

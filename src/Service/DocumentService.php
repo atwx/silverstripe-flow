@@ -211,7 +211,11 @@ class DocumentService
     ): CaseDocument {
         $context = $this->context($case, $template, $by, $input);
         $title = $this->title($case, $template, $by, $context);
-        $pdf = Injector::inst()->get(PdfRenderer::class)->render($this->html($case, $template, $by, $input), $title);
+        $pdf = Injector::inst()->get(PdfRenderer::class)->render(
+            $this->html($case, $template, $by, $input),
+            $title,
+            ['context' => 'document']
+        );
         $document->Title = $title;
         $document->FreeText = $context['FreeText'];
         $document->SignerID = (int) $context['Signer']?->ID;

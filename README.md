@@ -367,9 +367,42 @@ method `flowDocumentData(DocumentTemplate $template, ?Member $signer): array`,
 or add an extension to `DocumentService` with
 `updateFlowDocumentData(array &$data, DataObject $case, DocumentTemplate $template)`.
 
-PDFs are made by the `PdfRenderer` service, by default with
-`atwx/silverstripe-headless-pdf` (headless Chrome; the HTML is printed from a
-temporary file, nothing is served through a URL).
+PDFs are made by the `PdfRenderer` service
+(`render(string $html, string $name, array $options = [])`), by default
+`MpdfPdfRenderer` with [atwx/silverstripe-mpdf](https://github.com/atwx/silverstripe-mpdf)
+(pure PHP, no browser). Install it with the VCS repository
+`https://github.com/atwx/silverstripe-mpdf.git` and `atwx/silverstripe-mpdf: ^1.0.1`.
+
+Flow passes the option `context`: `document` for case documents, `receipt` for
+intake receipts. `MpdfPdfRenderer.profiles` maps a context to an mPDF profile
+(`flow_document`, `flow_receipt`; `default` for calls without context); an
+explicit `profile` option wins, the document name becomes the PDF title. Fonts,
+CSS and letter paper go into the profile:
+
+```yaml
+Atwx\Mpdf\MpdfRenderer:
+  font_dirs: [app/pdf/fonts]
+  fonts:
+    nunito: { R: Nunito-Regular.ttf, B: Nunito-Bold.ttf }
+  profiles:
+    flow_document:
+      background: app/pdf/letterhead.pdf
+      mpdf: { default_font: nunito }
+```
+
+Templates for mPDF: no flexbox/grid, no `calc()`, no `::before`/`::after`, limited
+selectors; use tables or floats for columns and `<htmlpagefooter>` for page
+furniture. Only fonts mPDF knows are used (Arial/Helvetica fall back to DejaVu
+Sans unless configured). See the module README.
+
+The previous Chrome renderer stays available as alternative
+(`atwx/silverstripe-headless-pdf`):
+
+```yaml
+SilverStripe\Core\Injector\Injector:
+  Atwx\Flow\Document\PdfRenderer:
+    class: Atwx\Flow\Document\HeadlessPdfRenderer
+```
 
 ## Comments, follow-ups and to-dos
 
