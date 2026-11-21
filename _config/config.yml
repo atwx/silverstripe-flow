@@ -6,7 +6,16 @@ Name: silverstripe-flow
 
 SilverStripe\Core\Injector\Injector:
   Atwx\Flow\Document\PdfRenderer:
-    class: Atwx\Flow\Document\HeadlessPdfRenderer
+    class: Atwx\Flow\Document\MpdfPdfRenderer
+
+# mPDF profiles used by MpdfPdfRenderer (see its `profiles` config).
+# Projects extend them, e.g. with fonts, css or a letter paper `background`.
+Atwx\Mpdf\MpdfRenderer:
+  profiles:
+    flow_document:
+      keep_together: 300
+    flow_receipt:
+      keep_together: 300
 
 Atwx\SilverstripeFrontdeskKit\Catalog\Catalogs:
   extensions:

@@ -8,11 +8,16 @@ use RuntimeException;
 /**
  * Renders PDFs with atwx/silverstripe-headless-pdf (headless Chrome). The HTML
  * is written to a temporary file and printed from there, so no case data has
- * to be served through a URL.
+ * to be served through a URL. Options are ignored.
+ *
+ * Not the default any more; bind it in the project to use it:
+ *   SilverStripe\Core\Injector\Injector:
+ *     Atwx\Flow\Document\PdfRenderer:
+ *       class: Atwx\Flow\Document\HeadlessPdfRenderer
  */
 class HeadlessPdfRenderer implements PdfRenderer
 {
-    public function render(string $html, string $name): string
+    public function render(string $html, string $name, array $options = []): string
     {
         if (!class_exists(HeadlessPDFService::class)) {
             throw new RuntimeException('PDF rendering needs atwx/silverstripe-headless-pdf.');

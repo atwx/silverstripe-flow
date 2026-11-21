@@ -197,6 +197,7 @@ class IntakeTest extends FunctionalTest
         $this->assertSame('application/pdf', $receipt->getHeader('Content-Type'));
         $renderer = Injector::inst()->get(PdfRenderer::class);
         $this->assertInstanceOf(FakePdfRenderer::class, $renderer);
+        $this->assertSame(['context' => 'receipt'], $renderer->lastOptions);
         $html = $renderer->lastHtml;
         $this->assertStringContainsString('Ruth Tester', $html);
         $this->assertStringContainsString('03.04.2012', $html);

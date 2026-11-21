@@ -186,6 +186,7 @@ class DocumentTest extends SapphireTest
             $this->renderer->lastHtml
         );
         $this->assertSame('%PDF-fake Bestätigung Kurs A', $document->File->getString());
+        $this->assertSame(['context' => 'document'], $this->renderer->lastOptions);
         $this->assertSame('protected', $document->File->getVisibility());
         $this->assertSame(1, $course->FlowDocuments()->count());
 

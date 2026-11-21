@@ -12,9 +12,13 @@ class FakePdfRenderer implements PdfRenderer, TestOnly
 {
     public string $lastHtml = '';
 
-    public function render(string $html, string $name): string
+    /** @var array<string, mixed> */
+    public array $lastOptions = [];
+
+    public function render(string $html, string $name, array $options = []): string
     {
         $this->lastHtml = $html;
+        $this->lastOptions = $options;
         return '%PDF-fake ' . $name;
     }
 }

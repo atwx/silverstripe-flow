@@ -442,7 +442,8 @@ class IntakeService
     {
         return Injector::inst()->get(PdfRenderer::class)->render(
             $this->receiptHtml($submission),
-            (string) $submission->Reference
+            (string) $submission->Reference,
+            ['context' => 'receipt']
         );
     }
 
