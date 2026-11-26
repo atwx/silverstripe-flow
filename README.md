@@ -233,6 +233,30 @@ App\Controllers\StudentController:
     flowrevoke: 'links'       # Bearbeitungslink widerrufen
 ```
 
+### Layout "cards and tabs" and the status card
+
+With the kit's `RecordPages::layout('tabs')` a case controller shows status
+and phase on the right of the header (`defineHeaderStatus()`, override it for
+several statuses per record, e.g. one per phase) instead of the header fields.
+`statusCard()` is a ready card with these rows, the members responsible and
+any field groups of the record; the groups are edited through the card, the
+status itself through the record action "Status ändern":
+
+```php
+protected function defineRecordPages(DataObject $record): ?RecordPages
+{
+    return RecordPages::create()
+        ->layout('tabs')
+        ->page(RecordPage::create('comments', 'Kommentare')->sublist(CommentSubController::class, ''))
+        ->card($this->statusCard('status', 'Status', ['keywords', 'whereabouts']))
+        ->groupCards();
+}
+```
+
+`FlowCaseController.status_card_assignees`: `'combined'` (default, one row
+"Zuständig: AB / CH" with initials) or `'rows'` (one row per responsibility
+with the name).
+
 ## Responsibilities
 
 A workflow can name responsibilities ("Zuständigkeit"), e.g. *Verantwortlich*
@@ -513,6 +537,53 @@ Several comments are deleted at once with the checkboxes and "Ausgewählte
 löschen" (stream) or the bulk action "Löschen" in `/followups` (table and
 stream), after one confirmation and with the same rights as deleting one.
 
+### Open entries, types, references and follow-ups in the stream
+
+In the stream display of a record's comments, five parts are on by default;
+each can be switched off (Archivschule: all off, a plain stream):
+
+```yaml
+Atwx\Flow\Controller\CommentSubController:
+  display: 'stream'
+  stream_open: true             # "Offen (n)": open to-dos, follow-ups, appointments with a checkbox to tick off
+  stream_types: true            # icon + type label per entry, filter chips "Alle" + types (off: no type in the form)
+  stream_references: true       # references to further records (form, labels, filter)
+  stream_done_toggle: true      # "erledigte einblenden" (done entries hidden by default)
+  stream_followup_action: true  # row action "Wiedervorlage": date + member, turns the entry into a follow-up
+```
+
+- **Open:** open entries of the kinds to-do, follow-up and appointment are
+  listed above the stream ("To-Do · Zeugnis anfordern · fällig 20.11. · AB")
+  instead of in it. The checkbox marks one as done without leaving the page
+  (POST `comments/<record>/toggledone/<id>` with security token).
+- **Types:** the catalog `flow_comment_type` is kept as `Atwx\Flow\Model\CommentType`
+  with an `Icon` (Lucide name from the kit's icon set, chosen in the catalog
+  form; existing entries are moved on `dev/build`). Filter: `?type=<code>`.
+- **References ("tags"):** a comment may refer to further records, stored in
+  `Flow_CommentReference` (comment, class and ID). The selectable records come
+  from the comment record (see `Comment::recordFor()`):
+
+  ```php
+  // e.g. on the case: the schools of its school choice
+  public function flowCommentReferences(): iterable
+  {
+      return $this->SchoolChoices()->map(fn ($choice) => $choice->School());
+  }
+
+  public function flowCommentReferencesTitle(): string   // optional, default "Bezüge"
+  {
+      return 'Schulen';
+  }
+  ```
+
+  The form gets a multiple choice (only offered records are saved), entries
+  show the titles, a select field filters the stream (`?ref=<Class>-<ID>`).
+  Without the method there are no references.
+- **Follow-up:** the row action "Wiedervorlage" asks for the date and the
+  member responsible and makes the entry an open follow-up. There are no
+  replies or threads.
+- Important comments carry the label "wichtig" and stay highlighted.
+
 ### Counters for navigation badges
 
 Static methods for the kit's `badge:` in `main_navigation`, counted for the
@@ -528,9 +599,23 @@ Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController:
       badge: 'Atwx\Flow\Controller\FollowUpController::countDue'   # mine, due today or earlier
 ```
 
-`countTodos()` counts the open to-dos, `countAppointments()` the appointments
-from today on within `FollowUpController.badge_appointment_days` (default 7,
-0 for all upcoming ones).
+`countTodos()` counts the open to-dos, `countTodoBasket()` the open to-dos
+without anyone responsible (view "To-do-Korb", `followups?view=basket`),
+`countAppointments()` the appointments from today on within
+`FollowUpController.badge_appointment_days` (default 7, 0 for all upcoming
+ones). With the kit's `icon`, `icon_only` and `badge_secondary` an entry can be
+an icon with two counters:
+
+```yaml
+    todos:
+      title: 'To-dos'
+      segment: 'followups-todos'
+      link: 'followups?view=todos'
+      icon: 'square-check'
+      icon_only: true
+      badge: 'Atwx\Flow\Controller\FollowUpController::countTodos'
+      badge_secondary: 'Atwx\Flow\Controller\FollowUpController::countTodoBasket'
+```
 
 ### Daily mail about due follow-ups
 

@@ -46,6 +46,7 @@ use SilverStripe\Security\Security;
  * @method Member CreatedBy()
  * @method Member LastEditedBy()
  * @method Member DoneBy()
+ * @method \SilverStripe\ORM\HasManyList<CommentReference> References()
  */
 class Comment extends DataObject
 {
@@ -58,6 +59,11 @@ class Comment extends DataObject
      * Kinds that are marked as done and appear in the lists of open entries.
      */
     public const array TASK_KINDS = [self::FOLLOW_UP, self::TODO];
+
+    /**
+     * Kinds listed under "Open" in the comment stream until they are done.
+     */
+    public const array OPEN_KINDS = [self::TODO, self::FOLLOW_UP, self::APPOINTMENT];
 
     public const string TYPE_CATALOG = 'flow_comment_type';
 
@@ -86,6 +92,14 @@ class Comment extends DataObject
         'CreatedBy' => Member::class,
         'LastEditedBy' => Member::class,
         'DoneBy' => Member::class,
+    ];
+
+    private static array $has_many = [
+        'References' => CommentReference::class,
+    ];
+
+    private static array $cascade_deletes = [
+        'References',
     ];
 
     private static array $catalog_fields = [
@@ -225,6 +239,19 @@ class Comment extends DataObject
     }
 
     /**
+     * Meta line without the type (shown as its own label): "13.11.2026 // Olga Organisation".
+     */
+    public function getStreamMetaWithoutType(): string
+    {
+        $parts = [date('d.m.Y', (int) strtotime((string) $this->Created))];
+        $editor = $this->LastEditedByID ? $this->LastEditedBy() : $this->CreatedBy();
+        if ($editor->exists()) {
+            $parts[] = $editor->getName();
+        }
+        return implode(' // ', $parts);
+    }
+
+    /**
      * Kind and responsible member in front of the text, except for memos:
      * "Follow-up (Olga Organisation):".
      */
@@ -251,6 +278,140 @@ class Comment extends DataObject
             : _t(self::class . '.STREAM_DUE', 'Due');
         $done = $this->IsDone ? ' (' . _t(self::class . '.STREAM_DONE', 'done') . ')' : '';
         return $label . ': ' . $due . $done;
+    }
+
+    /**
+     * Open to-do, follow-up or appointment (listed under "Open" in the stream).
+     */
+    public function isOpen(): bool
+    {
+        return in_array((string) $this->Kind, self::OPEN_KINDS, true) && !$this->IsDone;
+    }
+
+    /**
+     * Line of the "Open" area: "To-do · Zeugnis anfordern · fällig 20.11. · AB".
+     */
+    public function getOpenLine(): string
+    {
+        $parts = [$this->getKindLabel(), trim(preg_replace('/\s+/', ' ', (string) $this->Text))];
+        if ($this->DueDate) {
+            $date = date('d.m.', (int) strtotime((string) $this->DueDate));
+            $time = $this->DueTime ? ' ' . substr((string) $this->DueTime, 0, 5) : '';
+            $parts[] = $this->Kind === self::APPOINTMENT
+                ? $date . $time
+                : _t(self::class . '.OPEN_DUE', 'due {date}', ['date' => $date]) . $time;
+        }
+        $member = $this->Member();
+        if ($member->exists()) {
+            $parts[] = self::initials($member);
+        }
+        return implode(' · ', array_filter($parts, fn ($part) => $part !== ''));
+    }
+
+    public static function initials(Member $member): string
+    {
+        $initials = mb_substr((string) $member->FirstName, 0, 1) . mb_substr((string) $member->Surname, 0, 1);
+        return mb_strtoupper($initials !== '' ? $initials : mb_substr((string) $member->Email, 0, 2));
+    }
+
+    /**
+     * Icon of the comment's type (Lucide name), "" without one.
+     */
+    public function getTypeIcon(): string
+    {
+        $type = $this->Type();
+        return $type instanceof CommentType ? (string) $type->Icon : '';
+    }
+
+    public function getTypeLabel(): string
+    {
+        $type = $this->Type();
+        return $type->exists() ? (string) $type->getLabel() : '';
+    }
+
+    /**
+     * Titles of the referenced records that still exist.
+     *
+     * @return \SilverStripe\Model\List\ArrayList<\SilverStripe\Model\ArrayData>
+     */
+    public function getReferenceTitles(): \SilverStripe\Model\List\ArrayList
+    {
+        $titles = \SilverStripe\Model\List\ArrayList::create();
+        foreach ($this->References() as $reference) {
+            $target = $reference->Target();
+            if ($target->exists()) {
+                $titles->push(\SilverStripe\Model\ArrayData::create(['Title' => $target->getTitle()]));
+            }
+        }
+        return $titles;
+    }
+
+    /**
+     * Keys of the referenced records (CommentReference::keyFor()).
+     *
+     * @return array<int, string>
+     */
+    public function referenceKeys(): array
+    {
+        return array_map(fn (CommentReference $reference) => $reference->getKey(), $this->References()->toArray());
+    }
+
+    /**
+     * Replaces the references by the given records.
+     *
+     * @param iterable<DataObject> $targets
+     */
+    public function setReferences(iterable $targets): void
+    {
+        $keep = [];
+        foreach ($targets as $target) {
+            $keep[CommentReference::keyFor($target)] = $target;
+        }
+        foreach ($this->References() as $reference) {
+            if (isset($keep[$reference->getKey()])) {
+                unset($keep[$reference->getKey()]);
+            } else {
+                $reference->delete();
+            }
+        }
+        foreach ($keep as $target) {
+            CommentReference::create([
+                'CommentID' => $this->ID,
+                'TargetClass' => $target->ClassName,
+                'TargetID' => $target->ID,
+            ])->write();
+        }
+    }
+
+    /**
+     * The records a comment on this record may refer to: what the record's
+     * method flowCommentReferences() returns (e.g. the schools of a case's
+     * school choice), keyed by CommentReference::keyFor().
+     *
+     * @return array<string, DataObject>
+     */
+    public static function referenceOptionsFor(DataObject $record): array
+    {
+        if (!$record->hasMethod('flowCommentReferences')) {
+            return [];
+        }
+        $options = [];
+        foreach ($record->flowCommentReferences() ?? [] as $target) {
+            if ($target instanceof DataObject && $target->exists()) {
+                $options[CommentReference::keyFor($target)] = $target;
+            }
+        }
+        return $options;
+    }
+
+    /**
+     * Label of the references of a record's comments (its method
+     * flowCommentReferencesTitle(), default "References").
+     */
+    public static function referencesTitleFor(DataObject $record): string
+    {
+        $title = $record->hasMethod('flowCommentReferencesTitle') ? (string) $record->flowCommentReferencesTitle() : '';
+        return $title !== '' ? $title : _t(self::class . '.REFERENCES', 'References');
     }
 
     /**

@@ -79,6 +79,17 @@ class FollowUpController extends FrontdeskController
     }
 
     /**
+     * Badge: open to-dos without anyone responsible (the view "To-do basket").
+     */
+    public static function countTodoBasket(): int
+    {
+        if (!Security::getCurrentUser()) {
+            return 0;
+        }
+        return self::singleton()->openComments()->filter(['MemberID' => 0, 'Kind' => Comment::TODO])->count();
+    }
+
+    /**
      * Badge: the current member's appointments from today on, within
      * badge_appointment_days.
      */
