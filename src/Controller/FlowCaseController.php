@@ -40,6 +40,7 @@ use Atwx\SilverstripeFrontdeskKit\Table\ColumnCollection;
 use Atwx\SilverstripeFrontdeskKit\Table\ListView;
 use Atwx\SilverstripeFrontdeskKit\Table\RecordAction;
 use Atwx\SilverstripeFrontdeskKit\Table\TimelineEntry;
+use Atwx\SilverstripeFrontdeskKit\View\RecordCard;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Model\ArrayData;
@@ -449,13 +450,15 @@ abstract class FlowCaseController extends FrontdeskController
     }
 
     /**
-     * Status and phase in the header of a record view with record pages.
+     * Status and phase in the header of a record view with record pages. In
+     * the layout 'tabs' they are in the header status (defineHeaderStatus())
+     * and on the status card instead, so there are no header fields.
      *
      * @return ArrayList<ArrayData>|null
      */
     protected function defineHeaderFields(DataObject $record): ?ArrayList
     {
-        if (!$record->hasExtension(CaseFileExtension::class)) {
+        if (!$record->hasExtension(CaseFileExtension::class) || $this->usesTabsLayout($record)) {
             return null;
         }
         /** @var DataObject&CaseFileExtension $record */
@@ -484,6 +487,101 @@ abstract class FlowCaseController extends FrontdeskController
             }
         }
         return $fields;
+    }
+
+    protected function usesTabsLayout(DataObject $record): bool
+    {
+        return (bool) $this->defineRecordPages($record)?->isTabs();
+    }
+
+    /**
+     * Status (and phase) on the right of the header in the layout 'tabs'.
+     * Projects with several statuses per record (e.g. one per phase)
+     * override this; the status card shows the same rows.
+     *
+     * @return ArrayList<ArrayData>|null
+     */
+    protected function defineHeaderStatus(DataObject $record): ?ArrayList
+    {
+        if (!$record->hasExtension(CaseFileExtension::class)) {
+            return null;
+        }
+        /** @var DataObject&CaseFileExtension $record */
+        $status = $record->FlowStatus();
+        if (!$status->exists()) {
+            return null;
+        }
+        $rows = ArrayList::create([ArrayData::create([
+            'Title' => _t(self::class . '.STATUS', 'Status'),
+            'Value' => $status->Title,
+        ])]);
+        $phase = $status->Phase();
+        if ($phase->exists()) {
+            $rows->push(ArrayData::create(['Title' => _t(self::class . '.PHASE', 'Phase'), 'Value' => $phase->Title]));
+        }
+        return $rows;
+    }
+
+    /**
+     * Card "Status" for the layout 'tabs': the rows of defineHeaderStatus(),
+     * the members responsible and the given field groups of the record (edited
+     * through the card like any other card). The status itself is changed
+     * through the record action, not on the card.
+     *
+     *   ->card($this->statusCard('status', 'Status', ['keywords', 'whereabouts']))
+     *
+     * @param array<int, string> $groups
+     */
+    public function statusCard(string $key = 'status', ?string $title = null, array $groups = []): RecordCard
+    {
+        $card = RecordCard::create($key, $title ?? _t(self::class . '.STATUS', 'Status'))
+            ->content(fn (DataObject $record) => (string) $this->renderWith(
+                'Atwx\\SilverstripeFrontdeskKit\\Includes\\CardFields',
+                ['Rows' => $this->statusCardRows($record)]
+            ));
+        if ($groups) {
+            $card->groups($groups);
+        }
+        return $card;
+    }
+
+    /**
+     * How the status card lists the members responsible: 'combined' (one row
+     * "Responsible: AB / CH" with initials) or 'rows' (one row per
+     * responsibility with the name).
+     */
+    private static string $status_card_assignees = 'combined';
+
+    /**
+     * Rows of the status card (Label, Value).
+     *
+     * @return ArrayList<ArrayData>
+     */
+    protected function statusCardRows(DataObject $record): ArrayList
+    {
+        $rows = ArrayList::create();
+        foreach ($this->defineHeaderStatus($record) ?? [] as $status) {
+            $rows->push(ArrayData::create(['Label' => $status->Title, 'Value' => $status->Value, 'Type' => 'text']));
+        }
+        $assignees = [];
+        foreach ($this->responsibilities() as $responsibility) {
+            $assignee = AssignmentService::singleton()->assignee($record, $responsibility);
+            if ($assignee) {
+                $assignees[] = [$responsibility->Title, $assignee];
+            }
+        }
+        if (static::config()->get('status_card_assignees') === 'rows') {
+            foreach ($assignees as [$label, $member]) {
+                $rows->push(ArrayData::create(['Label' => $label, 'Value' => $member->getName(), 'Type' => 'text']));
+            }
+        } elseif ($assignees) {
+            $rows->push(ArrayData::create([
+                'Label' => _t(self::class . '.RESPONSIBLE', 'Responsible'),
+                'Value' => implode(' / ', array_map(fn ($a) => Comment::initials($a[1]), $assignees)),
+                'Type' => 'text',
+            ]));
+        }
+        return $rows;
     }
 
     /**

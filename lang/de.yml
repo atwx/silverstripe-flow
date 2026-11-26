@@ -134,6 +134,7 @@ de:
     REQUIRED: 'Bitte eine Auswahl treffen.'
     DUPLICATE: 'Für diese Feldgruppe, Rolle und diesen Status gibt es bereits einen Eintrag.'
   Atwx\Flow\Controller\FlowCaseController:
+    RESPONSIBLE: 'Zuständig'
     TIMELINE_COMMENT: '{kind}: {text}'
     TIMELINE_COMMENT_DATED: '{kind} zum {date}: {text}'
     TIMELINE_COMMENT_DONE: 'Erledigt: {text}'
@@ -328,6 +329,9 @@ de:
     STATUS_REQUIRED: 'Bitte einen Status dieses Ablaufs wählen.'
     DAYS_NEGATIVE: 'Die Anzahl der Tage darf nicht negativ sein.'
   Atwx\Flow\Model\Comment:
+    OPEN_DUE: 'fällig {date}'
+    REFERENCES: 'Bezüge'
+    IMPORTANT_PREFIX: 'wichtig'
     STREAM_APPOINTMENT: 'Termin'
     STREAM_DUE: 'Fällig'
     STREAM_DONE: 'erledigt'
@@ -350,6 +354,16 @@ de:
     TEXT_TOO_LONG: 'Bitte höchstens {max} Zeichen.'
     TEXT_REQUIRED: 'Bitte einen Text eingeben.'
   Atwx\Flow\Controller\CommentSubController:
+    OPEN: 'Offen'
+    MARK_DONE: 'Als erledigt markieren'
+    SHOW_DONE: 'erledigte einblenden'
+    HIDE_DONE: 'erledigte ausblenden'
+    FILTER_ALL: 'Alle'
+    FILTER_ALL_REFERENCES: 'alle'
+    FOLLOW_UP_TITLE: 'Wiedervorlage'
+    FOLLOW_UP_DATE: 'Wiedervorlage am'
+    FOLLOW_UP_SAVED: 'Wiedervorlage gesetzt.'
+    ACTION_FOLLOW_UP: 'Wiedervorlage'
     DELETE_SELECTED: 'Ausgewählte löschen'
     CONFIRM_DELETE_SELECTED: 'Die ausgewählten Kommentare löschen?'
     DELETED_COUNT: '{count} Kommentare gelöscht.'
@@ -613,3 +627,7 @@ de:
     Roles: 'Zuständig für'
     Notes: 'Notizen'
     NAME_REQUIRED: 'Bitte einen Namen oder eine Funktion eingeben.'
+  Atwx\Flow\Model\CommentType:
+    ICON: 'Icon'
+    SINGULARNAME: 'Kommentartyp'
+    PLURALNAME: 'Kommentartypen'

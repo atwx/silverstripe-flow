@@ -34,8 +34,28 @@ class TestParticipant extends DataObject implements TestOnly
         'Photo' => File::class,
     ];
 
+    /**
+     * Records comments may refer to (CommentSubController references); empty: none.
+     *
+     * @var array<int, DataObject>
+     */
+    public static array $referenceTargets = [];
+
     public function getTitle(): string
     {
         return (string) $this->Name;
+    }
+
+    /**
+     * @return array<int, DataObject>
+     */
+    public function flowCommentReferences(): array
+    {
+        return self::$referenceTargets;
+    }
+
+    public function flowCommentReferencesTitle(): string
+    {
+        return 'Kurse';
     }
 }
