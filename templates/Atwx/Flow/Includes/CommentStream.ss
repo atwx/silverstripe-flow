@@ -12,7 +12,12 @@
                    hx-post="$Top.ToggleDoneLink($ID)" hx-target="$Top.HtmxTarget" hx-swap="innerHTML"
                    hx-vals='{"SecurityID": "$Top.SecurityTokenValue"}'>
             <% end_if %>
-            <span class="text-sm<% if $isOverdue %> text-error<% end_if %>">$OpenLine</span>
+            <span class="text-sm flex-1 min-w-0<% if $isOverdue %> text-error<% end_if %>">$OpenLine</span>
+            <% if $Top.canEdit %>
+            <button type="button" class="btn btn-ghost btn-xs" title="<%t Atwx\SilverstripeFrontdeskKit\Controller\FrontdeskController.ACTION_EDIT 'Edit' %>"
+                    hx-get="$Top.EditLinkFor($ID)" hx-target="#fdk-modal-content" hx-swap="innerHTML" hx-indicator="#fdk-modal-spinner"
+                    onclick="document.getElementById('fdk-modal').showModal()"><i data-lucide="pencil" class="size-3.5"></i></button>
+            <% end_if %>
         </li>
         <% end_loop %>
     </ul>

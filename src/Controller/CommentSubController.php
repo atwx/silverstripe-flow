@@ -325,6 +325,12 @@ class CommentSubController extends FrontdeskSubController
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- template method
+    public function EditLinkFor(int $id): string
+    {
+        return $this->Link('edit/' . $id);
+    }
+
+    // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- template method
     public function ToggleDoneLink(int $id): string
     {
         return $this->streamLink([], 'toggledone/' . $id);
