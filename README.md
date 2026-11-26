@@ -518,7 +518,8 @@ The old table is renamed to `_obsolete_Flow_FollowUp`. In code:
 ### Comment stream and deleting several
 
 Instead of a table, the comments of a record and the work list `/followups`
-can be shown as a stream: a meta line "date // editor // type", the date of
+can be shown as a stream: a meta line "date // author // type" (the author
+stays when someone else edits the entry; "bearbeitet von …" is added), the date of
 appointments and follow-ups, the kind with the responsible member in bold
 ("Wiedervorlage (Olga):") and the text with its line breaks. Open
 appointments come first, then important comments (both highlighted), then the
@@ -617,6 +618,9 @@ Atwx\Flow\Controller\FollowUpController:
 - `member`: `selectable` (default, follows "Nach Nutzer"), `me`, `none`
   (nobody responsible) or `any`.
 - `title_other`: title while another member is chosen (`{name}`).
+- "Nach Nutzer" also offers **Alle** (`?member=all`): `selectable` columns then
+  show the entries of all members; `title_all` is their title (default:
+  "<title> – Alle").
 - `actions: [take]`: the button "Übernehmen" on each entry.
 - `page_column_limit` (default 100) entries per column.
 

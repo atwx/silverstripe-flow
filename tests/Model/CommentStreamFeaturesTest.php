@@ -265,6 +265,28 @@ class CommentStreamFeaturesTest extends SapphireTest
         $this->assertNotContains('Wiedervorlage', $labels);
     }
 
+    public function testAuthorStaysWhenSomeoneElseEdits(): void
+    {
+        $comment = $this->comment(['Kind' => Comment::TODO, 'Text' => 'Anrufen', 'DueDate' => '2026-12-01']);
+        $this->assertStringContainsString('Olga Ost', $comment->getStreamMeta());
+        $this->assertSame('', $comment->getEditedByNote());
+
+        $kai = Member::create(['Email' => 'kai@example.com', 'FirstName' => 'Kai', 'Surname' => 'Klein']);
+        $kai->write();
+        $this->logInAs($kai);
+        $comment->Text = 'Zurückrufen';
+        $comment->write();
+        $comment = Comment::get()->byID($comment->ID);
+        $this->assertStringContainsString('Olga Ost', $comment->getStreamMeta(), 'the author, not the editor');
+        $this->assertStringNotContainsString('Kai Klein', $comment->getStreamMeta());
+        $this->assertSame('bearbeitet von Kai Klein', $comment->getEditedByNote());
+
+        $this->logInAs($this->olga);
+        $html = $this->html();
+        $this->assertStringContainsString('Olga Ost', $html, 'author in the area "Open"');
+        $this->assertStringContainsString('To-Do · Zurückrufen', $html);
+    }
+
     public function testCountTodoBasket(): void
     {
         $this->comment(['Kind' => Comment::TODO, 'Text' => 'Korb']);

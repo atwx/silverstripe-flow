@@ -33,6 +33,7 @@ class FollowUpController extends FrontdeskController
      * title, columns: [{title, kind (followup, todo, appointment or a list),
      * member: selectable (default: "By member", the current member first) |
      * me | none (nobody responsible) | any, title_other ('… von {name}'),
+     * title_all (while "By member" is "All"),
      * actions: [take]}]. Reached at followups/<key>; the plain list then goes
      * to the first page. Empty: the list with views (default).
      *

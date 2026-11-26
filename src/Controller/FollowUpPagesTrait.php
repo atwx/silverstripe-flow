@@ -102,6 +102,15 @@ trait FollowUpPagesTrait
     }
 
     /**
+     * "By member" is set to "All" (?member=all): the columns that follow it
+     * show the entries of all members.
+     */
+    protected function allMembersChosen(): bool
+    {
+        return $this->getRequest()->getVar('member') === 'all';
+    }
+
+    /**
      * The member chosen with ?member=<ID> (only one with open entries), else
      * the current member.
      */
@@ -137,9 +146,18 @@ trait FollowUpPagesTrait
 
     private function memberChoice(?Member $chosen): ArrayData
     {
-        $options = ArrayList::create();
+        $all = $this->allMembersChosen();
+        $options = ArrayList::create([ArrayData::create([
+            'ID' => 'all',
+            'Name' => _t(FollowUpController::class . '.ALL_MEMBERS', 'All'),
+            'Selected' => $all,
+        ])]);
         foreach ($this->memberOptions() as $id => $name) {
-            $options->push(ArrayData::create(['ID' => $id, 'Name' => $name, 'Selected' => $id === (int) $chosen?->ID]));
+            $options->push(ArrayData::create([
+                'ID' => $id,
+                'Name' => $name,
+                'Selected' => !$all && $id === (int) $chosen?->ID,
+            ]));
         }
         return ArrayData::create(['Options' => $options]);
     }
@@ -166,6 +184,12 @@ trait FollowUpPagesTrait
             case 'any':
                 break;
             default:
+                if ($this->allMembersChosen()) {
+                    $all = (string) ($column['title_all'] ?? '');
+                    $allLabel = _t(FollowUpController::class . '.ALL_MEMBERS', 'All');
+                    $title = $all !== '' ? $all : $title . ' – ' . $allLabel;
+                    break;
+                }
                 $list = $list->filter('MemberID', (int) $chosen?->ID);
                 if ($chosen && (int) $chosen->ID !== (int) $me?->ID) {
                     $other = (string) ($column['title_other'] ?? '');
@@ -180,8 +204,9 @@ trait FollowUpPagesTrait
         );
         $limit = (int) static::config()->get('page_column_limit');
         $actions = (array) ($column['actions'] ?? []);
-        $backURL = $this->Link($pageKey) . ($this->getRequest()->getVar('member')
-            ? '?member=' . (int) $this->getRequest()->getVar('member') : '');
+        $member = (string) $this->getRequest()->getVar('member');
+        $memberQuery = $member === 'all' ? '?member=all' : ((int) $member ? '?member=' . (int) $member : '');
+        $backURL = $this->Link($pageKey) . $memberQuery;
         $entries = ArrayList::create();
         foreach ($list->limit($limit) as $comment) {
             $entries->push($this->followUpEntry($comment, $actions, $backURL));
