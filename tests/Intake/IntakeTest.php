@@ -9,9 +9,11 @@ use Atwx\Flow\Intake\IntakeController;
 use Atwx\Flow\Intake\IntakeService;
 use Atwx\Flow\Intake\Submission;
 use Atwx\Flow\Intake\SubmissionFile;
+use Atwx\Flow\Intake\TakeoverConflictsChanged;
 use Atwx\Flow\Intake\UploadReader;
 use Atwx\Flow\Model\TextBlock;
 use Atwx\Flow\Tests\Stubs\FakePdfRenderer;
+use Atwx\Flow\Tests\Stubs\TestConflictTakeover;
 use Atwx\Flow\Tests\Stubs\TestIntakeHooks;
 use Atwx\Flow\Tests\Stubs\TestParticipant;
 use Atwx\Flow\Tests\Stubs\TestTakeover;
@@ -28,6 +30,7 @@ use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Manifest\ModuleLoader;
 use SilverStripe\Dev\FunctionalTest;
 use SilverStripe\ORM\FieldType\DBDatetime;
+use SilverStripe\Security\Member;
 use SilverStripe\Security\SecurityToken;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\SSViewer;
@@ -450,6 +453,89 @@ class IntakeTest extends FunctionalTest
         $schema = $post['requestBody']['content']['application/json']['schema'];
         $this->assertSame(['name', 'email', 'consent'], $schema['properties']['data']['required']);
         $this->assertSame(2, $schema['properties']['files']['properties']['photo']['maxItems']);
+    }
+
+    public function testTakeoverAsksOnConflicts(): void
+    {
+        Config::modify()->merge(IntakeService::class, 'types', [
+            'registration' => ['takeover' => TestConflictTakeover::class],
+        ]);
+        $existing = TestParticipant::create(['Name' => 'Old Ruth', 'Email' => 'old@example.org']);
+        $existing->write();
+        $answer = $this->json($this->submit('registration', ['data' => $this->registration()]));
+        $submission = Submission::get()->find('Reference', $answer['reference']);
+        $service = IntakeService::singleton();
+        $this->assertSame([], $service->takeoverConflicts($submission, 'new'), 'new participant: nothing to ask');
+        $conflicts = $service->takeoverConflicts($submission, (string) $existing->ID);
+        $this->assertSame(['Old Ruth', 'old@example.org'], array_column($conflicts, 'current'));
+        $this->assertSame(['Ruth Tester', 'ruth@example.org'], array_column($conflicts, 'new'));
+        $this->assertSame('Teilnehmer Old Ruth', $conflicts[0]['group']);
+
+        $this->logInWithPermission('FDK_INTAKE_EDIT');
+        $token = SecurityToken::inst()->getValue();
+        $this->post('intake/recordaction/' . $submission->ID, [
+            'RecordAction' => 'takeover',
+            'Option' => (string) $existing->ID,
+            'SecurityID' => $token,
+        ]);
+        $this->assertSame(Submission::NEW, Submission::get()->byID($submission->ID)->Status, 'not yet: asks first');
+        $page = (string) $this->get('intake/takeover/' . $submission->ID . '?choice=' . $existing->ID)->getBody();
+        $this->assertStringContainsString('Old Ruth', $page);
+        $this->assertStringContainsString('ruth@example.org', $page);
+        $this->assertStringContainsString('value="current" checked', $page, 'keep current preselected');
+        $this->assertSame(400, $this->get('intake/takeover/' . $submission->ID . '?choice=999')->getStatusCode());
+        preg_match('/name="Signature" value="([^"]+)"/', $page, $m);
+        preg_match_all('/name="Decision\[([0-9a-f]+)\]" value="new"/', $page, $names);
+        $this->assertCount(2, $names[1]);
+
+        // Changed in the meantime: asked again, nothing taken over
+        $existing->Email = 'other@example.org';
+        $existing->write();
+        $this->post('intake/takeover/' . $submission->ID, [
+            'choice' => (string) $existing->ID,
+            'Signature' => $m[1],
+            'Decision' => [$names[1][0] => 'new'],
+            'SecurityID' => $token,
+        ]);
+        $this->assertSame(Submission::NEW, Submission::get()->byID($submission->ID)->Status);
+        $page = (string) $this->get('intake/takeover/' . $submission->ID . '?choice=' . $existing->ID)->getBody();
+        $this->assertStringContainsString('other@example.org', $page);
+        preg_match('/name="Signature" value="([^"]+)"/', $page, $m);
+
+        // Name new, e-mail kept
+        $this->post('intake/takeover/' . $submission->ID, [
+            'choice' => (string) $existing->ID,
+            'Signature' => $m[1],
+            'Decision' => [$names[1][0] => 'new', $names[1][1] => 'current'],
+            'SecurityID' => $token,
+        ]);
+        $this->assertSame(Submission::TAKEN_OVER, Submission::get()->byID($submission->ID)->Status);
+        $participant = TestParticipant::get()->byID($existing->ID);
+        $this->assertSame('Ruth Tester', $participant->Name);
+        $this->assertSame('other@example.org', $participant->Email);
+        $this->assertSame([], Submission::get()->byID($submission->ID)->takeoverDecisions(), 'only during takeOver()');
+    }
+
+    public function testTakeoverServiceKeepsCurrentWithoutDecision(): void
+    {
+        Config::modify()->merge(IntakeService::class, 'types', [
+            'registration' => ['takeover' => TestConflictTakeover::class],
+        ]);
+        $existing = TestParticipant::create(['Name' => 'Old Ruth', 'Email' => '']);
+        $existing->write();
+        $answer = $this->json($this->submit('registration', ['data' => $this->registration()]));
+        $submission = Submission::get()->find('Reference', $answer['reference']);
+        $member = Member::create(['Email' => 'staff@example.org']);
+        $member->write();
+        try {
+            IntakeService::singleton()->takeOver($submission, (string) $existing->ID, $member, [], 'stale');
+            $this->fail('stale signature');
+        } catch (TakeoverConflictsChanged) {
+        }
+        IntakeService::singleton()->takeOver($submission, (string) $existing->ID, $member);
+        $participant = TestParticipant::get()->byID($existing->ID);
+        $this->assertSame('Old Ruth', $participant->Name, 'kept without decision');
+        $this->assertSame('ruth@example.org', $participant->Email, 'empty field filled');
     }
 
     public function testCsvExportWithNumberedRepeats(): void

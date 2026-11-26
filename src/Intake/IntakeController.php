@@ -31,6 +31,7 @@ use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBHTMLText;
 use SilverStripe\Security\Security;
+use SilverStripe\Security\SecurityToken;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -56,6 +57,7 @@ class IntakeController extends FrontdeskController
     private static array $allowed_actions = [
         'download',
         'csv',
+        'takeover',
     ];
 
     public function absoluteRecordLink(Submission $submission): string
@@ -159,6 +161,10 @@ class IntakeController extends FrontdeskController
                 ->submitLabel(_t(self::class . '.TAKE_OVER', 'Take over'))
                 ->handle(function (DataObject $submission, ?string $choice) use ($service, $member) {
                     /** @var Submission $submission */
+                    if ($service->takeoverConflicts($submission, $choice) !== []) {
+                        // Second step: the staff member decides per field
+                        return $this->redirect($this->takeoverLink($submission, $choice));
+                    }
                     try {
                         $service->takeOver($submission, $choice, $member);
                     } catch (TakeoverException $e) {
@@ -232,6 +238,116 @@ class IntakeController extends FrontdeskController
             'Active' => false,
         ]));
         return $actions;
+    }
+
+    private function takeoverLink(Submission $submission, ?string $choice): string
+    {
+        $query = $choice !== null ? '?choice=' . rawurlencode($choice) : '';
+        return $this->Link('takeover/' . $submission->ID) . $query;
+    }
+
+    /**
+     * takeover/<ID>?choice=…: second step of the takeover when the submission
+     * differs from data already there (TakeoverConflicts). Per field the staff
+     * member keeps the current value (preselected) or takes the new one.
+     * Asks again when the differences changed in the meantime.
+     *
+     * @return mixed
+     */
+    public function takeover(HTTPRequest $request)
+    {
+        $record = Submission::get()->byID((int) $request->param('ID'));
+        $member = Security::getCurrentUser();
+        if (!$record || !$member) {
+            return $this->httpError(404);
+        }
+        if (!$record->canEdit($member)) {
+            return $this->httpError(403);
+        }
+        $service = IntakeService::singleton();
+        $handler = $service->takeoverHandler($record);
+        $viewLink = $this->Link('view/' . $record->ID);
+        if (!$handler || $record->Status !== Submission::NEW) {
+            return $this->redirect($viewLink);
+        }
+        $choice = $request->requestVar('choice');
+        $choice = is_scalar($choice) && (string) $choice !== '' ? (string) $choice : null;
+        $choices = $handler->choices($record);
+        if ($choices !== [] ? ($choice === null || !array_key_exists($choice, $choices)) : $choice !== null) {
+            return $this->httpError(400);
+        }
+
+        $conflicts = $service->takeoverConflicts($record, $choice);
+        $posted = [];
+        if ($request->isPOST()) {
+            if (!SecurityToken::inst()->checkRequest($request)) {
+                return $this->httpError(400);
+            }
+            $decisions = [];
+            foreach ($conflicts as $conflict) {
+                $value = ((array) $request->postVar('Decision'))[self::decisionName($conflict['key'])] ?? null;
+                if ($value === 'new' || $value === 'current') {
+                    $decisions[$conflict['key']] = $value;
+                    $posted[self::decisionName($conflict['key'])] = $value;
+                }
+            }
+            try {
+                $service->takeOver($record, $choice, $member, $decisions, (string) $request->postVar('Signature'));
+                $this->flash(_t(self::class . '.TAKEN_OVER', 'The submission has been taken over.'));
+                return $this->redirect($viewLink);
+            } catch (TakeoverException $e) {
+                // Also TakeoverConflictsChanged: shown again with the current differences
+                $this->flash($e->getMessage(), 'error');
+            }
+            $conflicts = $service->takeoverConflicts($record, $choice);
+            if ($conflicts === []) {
+                return $this->redirect($viewLink);
+            }
+        } elseif ($conflicts === []) {
+            // Nothing to decide (any more): back to the one-step takeover
+            return $this->redirect($viewLink);
+        }
+
+        $groups = [];
+        foreach ($conflicts as $conflict) {
+            $name = self::decisionName($conflict['key']);
+            $groups[$conflict['group']] ??= ArrayList::create();
+            $groups[$conflict['group']]->push(ArrayData::create([
+                'Name' => 'Decision[' . $name . ']',
+                'Label' => $conflict['label'],
+                'Current' => $conflict['current'],
+                'New' => $conflict['new'],
+                'TakesNew' => ($posted[$name] ?? 'current') === 'new',
+            ]));
+        }
+        $groupList = ArrayList::create();
+        foreach ($groups as $title => $rows) {
+            $groupList->push(ArrayData::create(['Title' => (string) $title, 'Rows' => $rows]));
+        }
+        return $this->customise([
+            'Title' => _t(
+                self::class . '.TAKEOVER_TITLE',
+                'Take over {reference}',
+                ['reference' => $record->Reference]
+            ),
+            'Submission' => $record,
+            'ChoiceTitle' => $choice !== null ? $choices[$choice] : '',
+            'Choice' => $choice,
+            'Groups' => $groupList,
+            'Signature' => $service->conflictSignature($conflicts),
+            'FormAction' => $this->Link('takeover/' . $record->ID),
+            'BackLink' => $viewLink,
+            'Token' => SecurityToken::inst()->getValue(),
+        ])->renderWith([self::class . '_takeover', 'Page']);
+    }
+
+    /**
+     * Form name of a conflict (keys may contain characters PHP changes in
+     * request variables).
+     */
+    private static function decisionName(string $key): string
+    {
+        return substr(hash('sha256', $key), 0, 16);
     }
 
     /**

@@ -1148,6 +1148,45 @@ Atwx\Flow\Intake\IntakeService:
   submission is then *taken over*, with who and when and links to the
   records (`updateTakeoverLink` on the controller for their URLs). *Discard*
   marks it as not taken over.
+- **Conflicts:** when the submission may overwrite data already there (a
+  second child of a known family), the handler also implements
+  `TakeoverConflicts`. After the option is chosen, the inbox shows a second
+  step per group: field, current and new value, with "keep current"
+  preselected (and "keep all" / "take over all new"). Without conflicts the
+  takeover stays a single step.
+
+  ```php
+  class ApplicationTakeover implements TakeoverHandler, TakeoverConflicts
+  {
+      public function conflicts(Submission $submission, ?string $choice): array
+      {
+          $family = …;  // null for 'new': nothing to ask
+          return $family && $family->Street !== $submission->value('address.street') ? [[
+              'key' => 'family.' . $family->ID . '.Street',   // stable, for takesNew()
+              'group' => 'Familie ' . $family->Name,
+              'label' => 'Straße',
+              'current' => $family->Street,                   // plain text
+              'new' => $submission->value('address.street'),
+          ]] : [];
+      }
+
+      public function takeOver(Submission $submission, ?string $choice, Member $member): array
+      {
+          if (!$family->Street || $submission->takesNew('family.' . $family->ID . '.Street')) {
+              $family->Street = $submission->value('address.street');
+          }
+          // …
+      }
+  }
+  ```
+
+  `takesNew($key)` is false without a decision (current value kept);
+  `takeoverDecisions()` gives all of them (key => `current`|`new`). The
+  differences are compared again when taking over: if they changed in the
+  meantime, the staff member is asked again. In code:
+  `IntakeService::takeOver($submission, $choice, $member, $decisions,
+  $signature)` with `takeoverConflicts()` and `conflictSignature()`; a
+  different signature throws `TakeoverConflictsChanged`.
 - **Retention:** `sake flow:retention` (daily cron) deletes submissions with
   their files and folders once `retention.<status>` days have passed since
   the last status change. Claimed files stay.

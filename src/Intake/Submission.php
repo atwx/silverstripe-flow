@@ -227,6 +227,45 @@ class Submission extends DataObject
         return $this;
     }
 
+    /**
+     * Decisions of the staff member on the takeover conflicts (see
+     * TakeoverConflicts): key => 'current' | 'new'. Only set during takeOver().
+     *
+     * @var array<string, string>
+     */
+    private array $takeoverDecisions = [];
+
+    /**
+     * @return array<string, string>
+     */
+    public function takeoverDecisions(): array
+    {
+        return $this->takeoverDecisions;
+    }
+
+    /**
+     * @param array<string, string> $decisions
+     */
+    public function setTakeoverDecisions(array $decisions): static
+    {
+        $this->takeoverDecisions = [];
+        foreach ($decisions as $key => $decision) {
+            if ($decision === 'new' || $decision === 'current') {
+                $this->takeoverDecisions[(string) $key] = $decision;
+            }
+        }
+        return $this;
+    }
+
+    /**
+     * Whether the new value of a conflict is to be taken over; without a
+     * decision the current value is kept.
+     */
+    public function takesNew(string $key): bool
+    {
+        return ($this->takeoverDecisions[$key] ?? 'current') === 'new';
+    }
+
     public function validate(): ValidationResult
     {
         $result = parent::validate();
