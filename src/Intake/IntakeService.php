@@ -587,11 +587,65 @@ class IntakeService
     }
 
     /**
+     * Conflicts of the submission with data already there for the option
+     * (handlers implementing TakeoverConflicts), normalised: key, group,
+     * label, current, new (strings). Empty without conflicts.
+     *
+     * @return array<int, array{key: string, group: string, label: string, current: string, new: string}>
+     */
+    public function takeoverConflicts(Submission $submission, ?string $choice): array
+    {
+        $handler = $this->takeoverHandler($submission);
+        if (!$handler instanceof TakeoverConflicts) {
+            return [];
+        }
+        $conflicts = [];
+        foreach ($handler->conflicts($submission, $choice) as $conflict) {
+            $key = (string) ($conflict['key'] ?? '');
+            if ($key === '' || isset($conflicts[$key])) {
+                continue;
+            }
+            $conflicts[$key] = [
+                'key' => $key,
+                'group' => (string) ($conflict['group'] ?? ''),
+                'label' => (string) ($conflict['label'] ?? $key),
+                'current' => (string) ($conflict['current'] ?? ''),
+                'new' => (string) ($conflict['new'] ?? ''),
+            ];
+        }
+        return array_values($conflicts);
+    }
+
+    /**
+     * Fingerprint of the conflicts as shown: the takeover is refused when it
+     * differs at the time of taking over.
+     *
+     * @param array<int, array{key: string, group: string, label: string, current: string, new: string}> $conflicts
+     */
+    public function conflictSignature(array $conflicts): string
+    {
+        $parts = array_map(fn (array $c) => [$c['key'], $c['current'], $c['new']], $conflicts);
+        return hash('sha256', (string) json_encode($parts));
+    }
+
+    /**
      * Takes the submission over with the project's handler (in a transaction)
      * and marks it as taken over, linked to the records.
+     *
+     * $decisions: key => 'current' | 'new' for the conflicts (missing: keep
+     * the current value). With $signature (conflictSignature() of the
+     * conflicts shown) the takeover is refused with TakeoverConflictsChanged
+     * when the conflicts are different by now.
+     *
+     * @param array<string, string> $decisions
      */
-    public function takeOver(Submission $submission, ?string $choice, Member $member): void
-    {
+    public function takeOver(
+        Submission $submission,
+        ?string $choice,
+        Member $member,
+        array $decisions = [],
+        ?string $signature = null
+    ): void {
         if ($submission->Status === Submission::TAKEN_OVER) {
             throw new TakeoverException(_t(self::class . '.ALREADY', 'This submission has already been taken over.'));
         }
@@ -599,13 +653,25 @@ class IntakeService
         if (!$handler) {
             throw new TakeoverException(_t(self::class . '.NO_HANDLER', 'This form type has no takeover.'));
         }
-        DB::get_conn()->withTransaction(function () use ($submission, $choice, $member, $handler) {
-            $records = $handler->takeOver($submission, $choice, $member);
-            $submission->setStatus(Submission::TAKEN_OVER);
-            $submission->TakenOverByID = $member->ID;
-            $submission->setTakeoverRecords($records);
-            $submission->write();
-        });
+        $current = $this->conflictSignature($this->takeoverConflicts($submission, $choice));
+        if ($signature !== null && !hash_equals($current, $signature)) {
+            throw new TakeoverConflictsChanged(_t(
+                self::class . '.CONFLICTS_CHANGED',
+                'The data has changed in the meantime. Please check the differences again.'
+            ));
+        }
+        $submission->setTakeoverDecisions($decisions);
+        try {
+            DB::get_conn()->withTransaction(function () use ($submission, $choice, $member, $handler) {
+                $records = $handler->takeOver($submission, $choice, $member);
+                $submission->setStatus(Submission::TAKEN_OVER);
+                $submission->TakenOverByID = $member->ID;
+                $submission->setTakeoverRecords($records);
+                $submission->write();
+            });
+        } finally {
+            $submission->setTakeoverDecisions([]);
+        }
         $this->extend('onAfterTakeOver', $submission, $member);
     }
 
