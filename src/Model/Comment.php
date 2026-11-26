@@ -222,15 +222,13 @@ class Comment extends DataObject
     }
 
     /**
-     * Meta line of the stream: "13.11.2026 // Olga Organisation // Telefonat".
+     * Meta line of the stream: "13.11.2026 // Olga Organisation // Telefonat",
+     * with the author (as in the old system the author stays when someone
+     * else edits the entry; see getEditedByNote()).
      */
     public function getStreamMeta(): string
     {
-        $parts = [date('d.m.Y', (int) strtotime((string) $this->Created))];
-        $editor = $this->LastEditedByID ? $this->LastEditedBy() : $this->CreatedBy();
-        if ($editor->exists()) {
-            $parts[] = $editor->getName();
-        }
+        $parts = [$this->getStreamMetaWithoutType()];
         $type = $this->Type();
         if ($type->exists()) {
             $parts[] = $type->getLabel();
@@ -244,11 +242,37 @@ class Comment extends DataObject
     public function getStreamMetaWithoutType(): string
     {
         $parts = [date('d.m.Y', (int) strtotime((string) $this->Created))];
-        $editor = $this->LastEditedByID ? $this->LastEditedBy() : $this->CreatedBy();
-        if ($editor->exists()) {
-            $parts[] = $editor->getName();
+        $author = $this->getAuthor();
+        if ($author) {
+            $parts[] = $author->getName();
         }
         return implode(' // ', $parts);
+    }
+
+    /**
+     * The author: who created the entry (else who edited it last, for entries
+     * without an author, e.g. from imports).
+     */
+    public function getAuthor(): ?Member
+    {
+        if ($this->CreatedByID && $this->CreatedBy()->exists()) {
+            return $this->CreatedBy();
+        }
+        return $this->LastEditedByID && $this->LastEditedBy()->exists() ? $this->LastEditedBy() : null;
+    }
+
+    /**
+     * "bearbeitet von Kai Klein" when someone other than the author edited
+     * the entry, else "".
+     */
+    public function getEditedByNote(): string
+    {
+        $author = $this->getAuthor();
+        $editor = $this->LastEditedByID ? $this->LastEditedBy() : null;
+        if (!$editor || !$editor->exists() || ($author && (int) $author->ID === (int) $editor->ID)) {
+            return '';
+        }
+        return _t(self::class . '.EDITED_BY', 'edited by {name}', ['name' => $editor->getName()]);
     }
 
     /**

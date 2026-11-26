@@ -329,6 +329,7 @@ de:
     STATUS_REQUIRED: 'Bitte einen Status dieses Ablaufs wählen.'
     DAYS_NEGATIVE: 'Die Anzahl der Tage darf nicht negativ sein.'
   Atwx\Flow\Model\Comment:
+    EDITED_BY: 'bearbeitet von {name}'
     OPEN_DUE: 'fällig {date}'
     REFERENCES: 'Bezüge'
     IMPORTANT_PREFIX: 'wichtig'
@@ -372,6 +373,7 @@ de:
     YES: 'ja'
     IMPORTANT: 'wichtig'
   Atwx\Flow\Controller\FollowUpController:
+    ALL_MEMBERS: 'Alle'
     BY_MEMBER: 'Nach Nutzer'
     MORE_ENTRIES: '{count} weitere'
     VIEW_MINE_DUE: 'Meine fälligen'

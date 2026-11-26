@@ -11,7 +11,7 @@
         <% end_if %>
         <div class="flex-1 min-w-0">
             <% if $DueLabel %><p class="font-semibold<% if $isOverdue %> text-error<% end_if %>">$DueLabel</p><% end_if %>
-            <p class="text-xs text-base-content/60">$StreamMeta</p>
+            <p class="text-xs text-base-content/60">$StreamMeta<% if $EditedByNote %> <span class="italic">· $EditedByNote</span><% end_if %></p>
             <p class="whitespace-normal break-words"><% if $StreamLead %><strong>$StreamLead</strong> <% end_if %>$TextHtml</p>
             <% if $RecordLink %><p class="text-sm mt-1"><a href="$RecordLink" class="link link-primary">$RecordTitle</a></p><% end_if %>
         </div>

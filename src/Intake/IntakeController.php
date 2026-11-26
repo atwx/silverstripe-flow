@@ -350,7 +350,10 @@ class IntakeController extends FrontdeskController
                 'text' => TextareaField::create($fieldName, $title),
                 'email' => EmailField::create($fieldName, $title),
                 'date' => DateField::create($fieldName, $title),
-                'integer', 'number' => NumericField::create($fieldName, $title)->setScale($type === 'integer' ? 0 : 2),
+                // HTML5 number input: no thousands separator ("1.019" would be read as 1)
+                'integer', 'number' => NumericField::create($fieldName, $title)
+                    ->setHTML5(true)
+                    ->setScale($type === 'integer' ? 0 : 2),
                 'boolean' => CheckboxField::create($fieldName, $title),
                 'choice' => !empty($definition['multiple'])
                     ? CheckboxSetField::create($fieldName, $title, IntakeType::options($definition))

@@ -145,6 +145,12 @@ class FollowUpPagesTest extends SapphireTest
             'edit in the comments of the record'
         );
 
+        $html = (string) $this->request('todos', ['member' => 'all'])->getBody();
+        $this->assertStringContainsString('Meins', $html, 'all members');
+        $this->assertStringContainsString('Von Kai', $html);
+        $this->assertStringContainsString('Meine To-Do-Liste – Alle', $html);
+        $this->assertStringContainsString('<option value="all" selected>Alle</option>', $html);
+
         $html = (string) $this->request('todos', ['member' => (string) $this->kai->ID])->getBody();
         $this->assertStringContainsString('Von Kai', $html, 'another member');
         $this->assertStringNotContainsString('Meins', $html);

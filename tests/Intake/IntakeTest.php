@@ -327,6 +327,22 @@ class IntakeTest extends FunctionalTest
         $this->assertNull($submission->NotifiedAt);
     }
 
+    public function testLargeNumbersSurviveACorrectionInGerman(): void
+    {
+        // A field for IDs (e.g. an event above 1000); the form must not change it
+        $types = Config::inst()->get(IntakeService::class, 'types');
+        $types['registration']['fields']['years']['max'] = 99999;
+        Config::modify()->set(IntakeService::class, 'types', $types);
+        $submission = Submission::create(['Type' => 'registration', 'Reference' => 'X-2', 'Year' => 1, 'Number' => 2]);
+        $submission->storeValues($this->registration(['years' => 1019]))->write();
+        \SilverStripe\i18n\i18n::set_locale('de_DE');
+        $this->logInWithPermission('FDK_INTAKE_EDIT');
+        $edit = (string) $this->get('intake/edit/' . $submission->ID)->getBody();
+        $this->assertStringNotContainsString('value="1.019"', $edit, 'no thousands separator');
+        $this->submitForm('Form_EditForm', 'action_save', ['IntakeData[name]' => 'Ruth Corrected']);
+        $this->assertSame(1019, Submission::get()->byID($submission->ID)->value('years'), 'not read as 1');
+    }
+
     public function testInboxViewCorrectTakeOverAndRetention(): void
     {
         $existing = TestParticipant::create(['Name' => 'Old Ruth', 'Email' => 'ruth@example.org']);
