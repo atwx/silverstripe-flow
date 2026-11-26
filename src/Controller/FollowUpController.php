@@ -26,6 +26,38 @@ use SilverStripe\Security\Security;
  */
 class FollowUpController extends FrontdeskController
 {
+    use FollowUpPagesTrait;
+
+    /**
+     * Pages instead of the list with views (FollowUpPagesTrait), key =>
+     * title, columns: [{title, kind (followup, todo, appointment or a list),
+     * member: selectable (default: "By member", the current member first) |
+     * me | none (nobody responsible) | any, title_other ('… von {name}'),
+     * actions: [take]}]. Reached at followups/<key>; the plain list then goes
+     * to the first page. Empty: the list with views (default).
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    private static array $pages = [];
+
+    /**
+     * Views of the list that go to a page instead (view key => page key),
+     * e.g. ['mine-due' => 'followups', 'todos' => 'todos', 'basket' => 'todos'].
+     *
+     * @var array<string, string>
+     */
+    private static array $view_pages = [];
+
+    /**
+     * Most entries per column of a page.
+     */
+    private static int $page_column_limit = 100;
+
+    private static array $allowed_actions = [
+        'done' => '->canView',
+        'take' => '->canView',
+        'remove' => '->canView',
+    ];
     private static string $managed_model = Comment::class;
 
     private static string $url_segment = 'followups';
@@ -139,6 +171,10 @@ class FollowUpController extends FrontdeskController
      */
     public function index(HTTPRequest $request)
     {
+        $page = $this->redirectToFollowUpPage($request);
+        if ($page) {
+            return $page;
+        }
         if (!$this->isStream()) {
             return parent::index($request);
         }
