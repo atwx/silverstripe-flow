@@ -584,6 +584,47 @@ Atwx\Flow\Controller\CommentSubController:
   replies or threads.
 - Important comments carry the label "wichtig" and stay highlighted.
 
+### Pages of the work list
+
+Instead of one list with many views, `/followups` can consist of pages, each
+with the choice "Nach Nutzer" (default: the current member) and columns side
+by side (one below the other on phones). Entries look like the stream: date
+in bold, meta line, text, link to the record; a checkbox ticks one off, the
+pencil edits it (back to the page after saving), the bin deletes it, and a
+column may offer "Übernehmen" (the entry becomes the current member's).
+
+```yaml
+Atwx\Flow\Controller\FollowUpController:
+  display: 'stream'
+  pages:
+    followups:                                  # followups/followups
+      title: 'Wiedervorlagen'
+      columns:
+        - { title: 'Meine Wiedervorlagen', kind: followup, title_other: 'Wiedervorlagen von {name}' }
+    todos:                                      # followups/todos
+      title: 'To-Do'
+      columns:
+        - { title: 'Meine To-Do-Liste', kind: todo }
+        - { title: 'Todo-Korb', kind: todo, member: none, actions: [take] }
+  view_pages:                                   # old links ?view=… lead to a page
+    mine-due: followups
+    mine: followups
+    todos: todos
+    basket: todos
+```
+
+- `kind`: `followup`, `todo`, `appointment` or a list.
+- `member`: `selectable` (default, follows "Nach Nutzer"), `me`, `none`
+  (nobody responsible) or `any`.
+- `title_other`: title while another member is chosen (`{name}`).
+- `actions: [take]`: the button "Übernehmen" on each entry.
+- `page_column_limit` (default 100) entries per column.
+
+With pages, the plain `/followups` goes to the first page; views not listed
+in `view_pages` still show the list with views, filters and export. Page keys
+must not be names of actions (`view`, `edit`, `done`, `take`, `remove` …).
+Without `pages` nothing changes. Bulk actions are not offered on pages.
+
 ### Counters for navigation badges
 
 Static methods for the kit's `badge:` in `main_navigation`, counted for the

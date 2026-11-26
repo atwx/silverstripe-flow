@@ -372,6 +372,8 @@ de:
     YES: 'ja'
     IMPORTANT: 'wichtig'
   Atwx\Flow\Controller\FollowUpController:
+    BY_MEMBER: 'Nach Nutzer'
+    MORE_ENTRIES: '{count} weitere'
     VIEW_MINE_DUE: 'Meine fälligen'
     VIEW_MINE: 'Meine Wiedervorlagen'
     VIEW_TODOS: 'Meine To-Dos'

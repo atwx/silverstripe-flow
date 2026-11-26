@@ -161,6 +161,8 @@ class CommentStreamTest extends SapphireTest
             'MemberID' => $this->olga->ID,
         ]);
         Config::modify()->set(FollowUpController::class, 'display', 'stream');
+        // The list itself, also where a project configures pages
+        Config::modify()->set(FollowUpController::class, 'pages', []);
         $controller = FollowUpController::create();
         $request = new HTTPRequest('GET', 'followups');
         $request->setSession(new Session([]));

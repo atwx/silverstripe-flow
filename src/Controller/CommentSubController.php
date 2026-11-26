@@ -519,9 +519,23 @@ class CommentSubController extends FrontdeskSubController
         return FollowUpColumns::forRecord();
     }
 
+    /**
+     * After saving: back to the page the form was opened from (BackURL, e.g.
+     * a page of the work list), else the record.
+     */
+    protected function afterSaveLink(): string
+    {
+        $back = (string) $this->getRequest()->postVar('BackURL');
+        return $back !== '' && \SilverStripe\Control\Director::is_site_url($back) ? $back : parent::afterSaveLink();
+    }
+
     protected function formFields(FieldList $fields): FieldList
     {
         $fields = parent::formFields($fields);
+        $back = (string) $this->getRequest()->getVar('BackURL');
+        if ($back !== '' && \SilverStripe\Control\Director::is_site_url($back)) {
+            $fields->push(HiddenField::create('BackURL', '', $back));
+        }
         $fields->removeByName([
             'RecordID', 'RecordClass', 'Record', 'RuleID', 'CreatedByID', 'LastEditedByID', 'DoneByID', 'DoneAt',
         ]);
