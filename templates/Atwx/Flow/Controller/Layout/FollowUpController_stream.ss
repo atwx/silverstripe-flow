@@ -3,12 +3,7 @@
     <div class="fdk-page-header">
         <h1 class="fdk-page-title">$Title</h1>
         <div class="fdk-page-actions">
-            <% loop $Actions %>
-                <a href="$Link"
-                   class="btn btn-sm<% if $Primary %> btn-primary<% else %> btn-ghost<% end_if %>"
-                   <% if $Target %>target="$Target"<% end_if %>
-                   <% if $KeepQuery %>data-fdk-keep-query="$ExtraQuery.ATT"<% end_if %>>$Title</a>
-            <% end_loop %>
+            <% include Atwx\\SilverstripeFrontdeskKit\\Includes\\PageActions %>
         </div>
     </div>
 
